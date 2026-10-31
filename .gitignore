@@ -1,0 +1,8 @@
+flint
+flint.exe
+test_flint
+test_flint.exe
+*.o
+*.obj
+*.dSYM/
+.DS_Store
