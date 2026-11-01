@@ -1,6 +1,9 @@
 #include "ai_adapter.h"
 #include "../util/fs.h"
 #include "../util/json.h"
+#include "../config/config.h"
+#include "../git/git.h"
+#include "../process/proc.h"
 #include <string.h>
 
 static bool codex_is_available(void) {
@@ -12,6 +15,7 @@ static bool codex_is_available(void) {
 }
 
 typedef struct {
+    const flint_config_t *cfg;
     int lookback_hours;
     time_t cutoff_time;
     session_list_t *list;
@@ -34,18 +38,22 @@ static int codex_dir_cb(const char *parent, const char *entry_name, bool is_dir,
     strncpy(session.id, entry_name, sizeof(session.id) - 1);
     strncpy(session.tool_name, "ChatGPT Codex", sizeof(session.tool_name) - 1);
     strncpy(session.tool_cmd, "codex", sizeof(session.tool_cmd) - 1);
+    session.origin = SESSION_ORIGIN_USER;
     fs_expand_path("~", session.workspace, sizeof(session.workspace));
     session.last_active = mtime;
     fs_format_time(mtime, session.last_active_str, sizeof(session.last_active_str));
 
     snprintf(session.summary, sizeof(session.summary), "Recent Codex CLI session");
-    snprintf(session.resume_cmd, sizeof(session.resume_cmd), "codex");
+    config_format_tool_cmd(scan->cfg, "codex", session.id, session.resume_cmd, sizeof(session.resume_cmd));
+
+    git_inspect_workspace(session.workspace, scan->lookback_hours, &session.git);
+    session.is_already_running = proc_is_session_running("codex", session.workspace);
 
     session_list_add(scan->list, &session);
     return 0;
 }
 
-static int codex_discover(int lookback_hours, session_list_t *list) {
+static int codex_discover(const flint_config_t *cfg, int lookback_hours, session_list_t *list) {
     char codex_dir[MAX_PATH_LEN];
     fs_expand_path("~/.codex", codex_dir, sizeof(codex_dir));
 
@@ -54,6 +62,7 @@ static int codex_discover(int lookback_hours, session_list_t *list) {
 
     if (fs_dir_exists(codex_dir)) {
         codex_scan_t scan;
+        scan.cfg = cfg;
         scan.lookback_hours = lookback_hours;
         scan.cutoff_time = cutoff;
         scan.list = list;
@@ -70,7 +79,6 @@ const ai_adapter_t codex_adapter = {
     .discover_sessions = codex_discover
 };
 
-/* Registry of all AI adapters */
 static const ai_adapter_t *all_adapters[] = {
     &antigravity_adapter,
     &claude_adapter,

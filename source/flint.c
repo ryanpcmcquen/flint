@@ -1,6 +1,10 @@
 #include "flint.h"
 #include "ai/ai_adapter.h"
 #include "terminal/terminal.h"
+#include "config/config.h"
+#include "git/git.h"
+#include "journal/journal.h"
+#include "process/proc.h"
 #include "util/fs.h"
 
 #ifdef _WIN32
@@ -54,6 +58,7 @@ void session_list_free(session_list_t *list) {
 }
 
 #ifndef TEST_MODE
+
 static void print_banner(void) {
     time_t now = time(NULL);
     char date_buf[64];
@@ -77,11 +82,17 @@ static void print_usage(const char *prog_name) {
     printf(ANSI_BOLD "Options:\n" ANSI_RESET);
     printf("  -s, --summary           Display daily summary only (do not launch sessions)\n");
     printf("  -r, --resume            Automatically resume all active sessions without prompting\n");
-    printf("  -t, --terminal <name>   Target terminal client (e.g. iterm2, ghostty, apple-terminal,\n");
-    printf("                          gnome-terminal, alacritty, kitty, windows-terminal)\n");
+    printf("  -t, --terminal <name>   Target terminal client (iterm2, ghostty, kitty, apple-terminal,\n");
+    printf("                          gnome-terminal, alacritty, konsole, windows-terminal, powershell)\n");
     printf("  -d, --days <N>          Look back N days (default: 1 day / 24 hours)\n");
     printf("      --hours <H>         Look back H hours\n");
     printf("  -w, --workspace <path>  Filter sessions to specific workspace directory\n");
+    printf("      --origin <mode>     Filter by session origin: 'user', 'agent', or 'all'\n");
+    printf("  -j, --journal           Record daily standup log to markdown Git repository\n");
+    printf("      --weekly            Generate and display weekly standup summary\n");
+    printf("      --monthly           Generate and display monthly standup summary\n");
+    printf("  -c, --config <path>     Path to custom flint configuration file\n");
+    printf("      --init-config       Generate default ~/.config/flint/config template\n");
     printf("  -n, --dry-run           Show commands that would be executed without launching\n");
     printf("  -l, --list-terminals    List all supported and detected terminal clients\n");
     printf("  -v, --version           Print Flint version\n");
@@ -90,7 +101,6 @@ static void print_usage(const char *prog_name) {
 
 static int parse_args(int argc, char **argv, flint_options_t *opts) {
     memset(opts, 0, sizeof(*opts));
-    opts->lookback_hours = 24;
 
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
@@ -106,8 +116,31 @@ static int parse_args(int argc, char **argv, flint_options_t *opts) {
             opts->resume_now = true;
         } else if (strcmp(arg, "-n") == 0 || strcmp(arg, "--dry-run") == 0) {
             opts->dry_run = true;
+        } else if (strcmp(arg, "-j") == 0 || strcmp(arg, "--journal") == 0) {
+            opts->write_journal = true;
+        } else if (strcmp(arg, "--weekly") == 0) {
+            opts->weekly_summary = true;
+        } else if (strcmp(arg, "--monthly") == 0) {
+            opts->monthly_summary = true;
         } else if (strcmp(arg, "-l") == 0 || strcmp(arg, "--list-terminals") == 0) {
             opts->list_terminals = true;
+        } else if (strcmp(arg, "--init-config") == 0) {
+            char cfg_path[MAX_PATH_LEN];
+            fs_expand_path("~/.config/flint/config", cfg_path, sizeof(cfg_path));
+            char cfg_dir[MAX_PATH_LEN];
+            fs_expand_path("~/.config/flint", cfg_dir, sizeof(cfg_dir));
+            char mkdir_cmd[MAX_PATH_LEN * 2];
+            snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\" 2>/dev/null", cfg_dir);
+            system(mkdir_cmd);
+
+            if (config_create_default_file(cfg_path)) {
+                printf(ANSI_GREEN "Created template configuration at %s\n" ANSI_RESET, cfg_path);
+            } else {
+                fprintf(stderr, ANSI_RED "Failed to create configuration file at %s\n" ANSI_RESET, cfg_path);
+            }
+            exit(0);
+        } else if ((strcmp(arg, "-c") == 0 || strcmp(arg, "--config") == 0) && i + 1 < argc) {
+            strncpy(opts->config_path, argv[++i], sizeof(opts->config_path) - 1);
         } else if ((strcmp(arg, "-t") == 0 || strcmp(arg, "--terminal") == 0) && i + 1 < argc) {
             strncpy(opts->target_terminal, argv[++i], sizeof(opts->target_terminal) - 1);
         } else if ((strcmp(arg, "-d") == 0 || strcmp(arg, "--days") == 0) && i + 1 < argc) {
@@ -139,10 +172,43 @@ static void print_summary(const session_list_t *list) {
 
     for (size_t i = 0; i < list->count; i++) {
         const session_t *s = &list->items[i];
-        printf("\n  " ANSI_BOLD ANSI_CYAN "[%s]" ANSI_RESET " %s\n", s->tool_name, s->workspace);
+        const char *origin_str = (s->origin == SESSION_ORIGIN_USER) ? ANSI_BLUE "User" ANSI_RESET : ANSI_MAGENTA "Subagent" ANSI_RESET;
+        printf("\n  " ANSI_BOLD ANSI_CYAN "[%s]" ANSI_RESET " %s  (%s)\n", s->tool_name, s->workspace, origin_str);
         printf("    " ANSI_DIM "Last active:" ANSI_RESET " %s\n", s->last_active_str);
-        printf("    " ANSI_BOLD ANSI_GREEN "✓ " ANSI_RESET "%s\n", s->summary);
-        printf("    " ANSI_DIM "Resume command:" ANSI_RESET " cd \"%s\" && %s\n", s->workspace, s->resume_cmd);
+
+        if (s->was_merely_open) {
+            printf("    " ANSI_YELLOW "⚡ " ANSI_RESET "%s\n", s->summary);
+        } else {
+            printf("    " ANSI_BOLD ANSI_GREEN "✓ " ANSI_RESET "%s\n", s->summary);
+        }
+
+        /* Git details */
+        if (s->git.is_git_repo) {
+            printf("    " ANSI_DIM "Git branch:" ANSI_RESET " %s" ANSI_RESET "  " ANSI_DIM "(%s)" ANSI_RESET "\n",
+                   s->git.branch, s->git.uncommitted_summary);
+            if (s->git.commit_count > 0) {
+                printf("    " ANSI_DIM "Recent commits:" ANSI_RESET "\n");
+                const char *p = s->git.recent_commits;
+                while (*p) {
+                    const char *lstart = p;
+                    while (*p && *p != '\n' && *p != '\r') p++;
+                    size_t llen = (size_t)(p - lstart);
+                    if (llen > 0) {
+                        printf("      " ANSI_DIM "•" ANSI_RESET " %.*s\n", (int)llen, lstart);
+                    }
+                    while (*p == '\r' || *p == '\n') p++;
+                }
+            }
+            if (s->git.suggested_focus[0] != '\0') {
+                printf("    " ANSI_BOLD ANSI_YELLOW "💡 Focus:" ANSI_RESET " %s\n", s->git.suggested_focus);
+            }
+        }
+
+        if (s->is_already_running) {
+            printf("    " ANSI_CYAN "ℹ Process is currently running" ANSI_RESET "\n");
+        } else {
+            printf("    " ANSI_DIM "Resume command:" ANSI_RESET " cd \"%s\" && %s\n", s->workspace, s->resume_cmd);
+        }
     }
 
     printf("\n  " ANSI_DIM "────────────────────────────────────────────────────────────" ANSI_RESET "\n\n");
@@ -154,19 +220,37 @@ static int resume_sessions(const session_list_t *list, const terminal_adapter_t 
         return -1;
     }
 
-    printf(ANSI_BOLD "  Resuming %zu session(s) in %s%s...\n" ANSI_RESET,
-           list->count, term->display_name, dry_run ? " (Dry Run)" : "");
-
+    /* Filter out sessions that are already running */
+    size_t launch_count = 0;
     for (size_t i = 0; i < list->count; i++) {
-        const session_t *s = &list->items[i];
-        printf("  " ANSI_CYAN "→" ANSI_RESET " [%s] in %s\n", s->tool_cmd, s->workspace);
-        int res = term->launch_session(s, dry_run);
-        if (res != 0 && !dry_run) {
-            fprintf(stderr, "    " ANSI_RED "Failed to launch session in %s (exit code %d)\n" ANSI_RESET, term->display_name, res);
+        if (!list->items[i].is_already_running) {
+            launch_count++;
         }
     }
 
-    printf("\n  " ANSI_BOLD ANSI_GREEN "All active sessions resumed!" ANSI_RESET "\n\n");
+    if (launch_count == 0) {
+        printf("  " ANSI_CYAN "All active sessions are already currently running. Nothing to relaunch." ANSI_RESET "\n\n");
+        return 0;
+    }
+
+    printf(ANSI_BOLD "  Resuming %zu session(s) in tabs via %s%s...\n" ANSI_RESET,
+           launch_count, term->display_name, dry_run ? " (Dry Run)" : "");
+
+    for (size_t i = 0; i < list->count; i++) {
+        const session_t *s = &list->items[i];
+        if (s->is_already_running) {
+            printf("  " ANSI_DIM "↷ [%s] in %s is already running (skipped)" ANSI_RESET "\n", s->tool_cmd, s->workspace);
+            continue;
+        }
+
+        printf("  " ANSI_CYAN "→" ANSI_RESET " Opening tab for [%s] in %s\n", s->tool_cmd, s->workspace);
+        int res = term->launch_session(s, dry_run);
+        if (res != 0 && !dry_run) {
+            fprintf(stderr, "    " ANSI_RED "Failed to launch tab in %s (exit code %d)\n" ANSI_RESET, term->display_name, res);
+        }
+    }
+
+    printf("\n  " ANSI_BOLD ANSI_GREEN "Session launch complete!" ANSI_RESET "\n\n");
     return 0;
 }
 
@@ -176,9 +260,26 @@ int main(int argc, char **argv) {
         return 1;
     }
 
+    /* Load plaintext configuration file */
+    flint_config_t cfg;
+    config_load(opts.config_path, &cfg);
+
+    /* CLI overrides */
+    if (opts.lookback_hours > 0) {
+        cfg.lookback_hours = opts.lookback_hours;
+    }
+
     if (opts.list_terminals) {
         terminal_print_list();
         return 0;
+    }
+
+    if (opts.weekly_summary) {
+        return journal_generate_weekly(&cfg);
+    }
+
+    if (opts.monthly_summary) {
+        return journal_generate_monthly(&cfg);
     }
 
     print_banner();
@@ -195,7 +296,7 @@ int main(int argc, char **argv) {
         if (ad->is_available()) {
             session_list_t tool_sessions;
             session_list_init(&tool_sessions);
-            ad->discover_sessions(opts.lookback_hours, &tool_sessions);
+            ad->discover_sessions(&cfg, cfg.lookback_hours, &tool_sessions);
 
             for (size_t s = 0; s < tool_sessions.count; s++) {
                 const session_t *sess = &tool_sessions.items[s];
@@ -212,6 +313,11 @@ int main(int argc, char **argv) {
     /* Print daily standup summary */
     print_summary(&all_sessions);
 
+    /* Optionally record to markdown Git journal */
+    if (opts.write_journal || cfg.auto_journal) {
+        journal_record_daily(&cfg, &all_sessions);
+    }
+
     if (all_sessions.count == 0 || opts.summary_only) {
         session_list_free(&all_sessions);
         return 0;
@@ -221,20 +327,50 @@ int main(int argc, char **argv) {
     const terminal_adapter_t *target_term = NULL;
     if (opts.target_terminal[0] != '\0') {
         target_term = terminal_find(opts.target_terminal);
-        if (!target_term) {
-            fprintf(stderr, ANSI_RED "Unknown terminal '%s'. Use --list-terminals to view options.\n" ANSI_RESET, opts.target_terminal);
-            session_list_free(&all_sessions);
-            return 1;
-        }
-    } else {
+    } else if (cfg.preferred_terminal[0] != '\0') {
+        target_term = terminal_find(cfg.preferred_terminal);
+    }
+
+    if (!target_term) {
         target_term = terminal_detect_default();
+    }
+
+    /* Build candidate resume list according to resume_mode */
+    session_list_t resume_candidates;
+    session_list_init(&resume_candidates);
+    for (size_t i = 0; i < all_sessions.count; i++) {
+        const session_t *s = &all_sessions.items[i];
+        if (cfg.resume_mode == RESUME_MODE_USER && s->origin != SESSION_ORIGIN_USER) {
+            continue;
+        }
+        if (cfg.resume_mode == RESUME_MODE_AGENT && s->origin != SESSION_ORIGIN_AGENT) {
+            continue;
+        }
+        session_list_add(&resume_candidates, s);
+    }
+
+    /* Count sessions that aren't already running */
+    size_t resumable_count = 0;
+    for (size_t i = 0; i < resume_candidates.count; i++) {
+        if (!resume_candidates.items[i].is_already_running) {
+            resumable_count++;
+        }
+    }
+
+    if (resumable_count == 0) {
+        printf("  " ANSI_CYAN "All sessions matching resume_mode are already running." ANSI_RESET "\n\n");
+        session_list_free(&resume_candidates);
+        session_list_free(&all_sessions);
+        return 0;
     }
 
     bool should_resume = opts.resume_now || opts.dry_run;
 
     if (!should_resume && isatty(fileno(stdin))) {
-        printf("  Resume %zu active session(s) in " ANSI_BOLD "%s" ANSI_RESET "? [Y/n] ",
-               all_sessions.count, target_term ? target_term->display_name : "terminal");
+        const char *mode_str = (cfg.resume_mode == RESUME_MODE_USER) ? "user" :
+                               (cfg.resume_mode == RESUME_MODE_AGENT) ? "agent" : "all";
+        printf("  Resume %zu %s session(s) in tabs via " ANSI_BOLD "%s" ANSI_RESET "? [Y/n] ",
+               resumable_count, mode_str, target_term ? target_term->display_name : "terminal");
         fflush(stdout);
 
         char input[32] = {0};
@@ -249,10 +385,12 @@ int main(int argc, char **argv) {
     }
 
     if (should_resume) {
-        resume_sessions(&all_sessions, target_term, opts.dry_run);
+        resume_sessions(&resume_candidates, target_term, opts.dry_run);
     }
 
+    session_list_free(&resume_candidates);
     session_list_free(&all_sessions);
     return 0;
 }
+
 #endif
