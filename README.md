@@ -174,4 +174,4 @@ typedef struct terminal_adapter {
 
 ## License
 
-MIT License. See LICENSE for details.
+ISC License. See LICENSE for details.
