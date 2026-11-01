@@ -29,13 +29,13 @@ MV=move # \
 RM=del /q # \
 CC=clang # \
 # Windows paths/inputs for the compiler stage: # \
-WIN_SOURCE=source\flint.c source\ai\*.c source\terminal\*.c source\util\*.c # \
+WIN_SOURCE=source\flint.c source\ai\*.c source\terminal\*.c source\util\*.c source\config\*.c source\git\*.c source\journal\*.c source\process\*.c # \
 WIN_TARGET=-o $(TITLE).exe # \
 # Build commands (single-line; safe to call from shared targets): # \
 RELEASE_CMD=$(CC) $(FLAGS) -O3 $(WIN_SOURCE) $(WIN_TARGET) # \
 DEBUG_CMD=$(CC) $(FLAGS) -g $(WIN_SOURCE) $(WIN_TARGET) # \
 MEMDEBUG_CMD=$(CC) $(FLAGS) -g -fsanitize=address $(WIN_SOURCE) $(WIN_TARGET) # \
-TEST_CMD=$(CC) $(FLAGS) tests\test_flint.c source\flint.c source\ai\*.c source\terminal\*.c source\util\*.c -o test_flint.exe && test_flint.exe && $(RM) test_flint.exe # \
+TEST_CMD=$(CC) $(FLAGS) -DTEST_MODE tests\test_flint.c $(WIN_SOURCE) -o test_flint.exe && test_flint.exe && $(RM) test_flint.exe # \
 !ELSE
 # -------------------- make (Linux/macOS/BSD) configuration --------------------
 CP=cp -f
@@ -43,12 +43,12 @@ MV=mv -f
 RM=rm -f
 CC=clang
 
-POSIX_SOURCE=source/flint.c source/ai/*.c source/terminal/*.c source/util/*.c
+POSIX_SOURCE=source/flint.c source/*/*.c
 
 RELEASE_CMD=$(CC) $(FLAGS) -O3 $(POSIX_SOURCE) -o $(TITLE)
 DEBUG_CMD=$(CC) $(FLAGS) -g $(POSIX_SOURCE) -o $(TITLE)
 MEMDEBUG_CMD=$(CC) $(FLAGS) -g -fsanitize=address $(POSIX_SOURCE) -o $(TITLE)
-TEST_CMD=$(CC) $(FLAGS) -DTEST_MODE tests/test_flint.c source/flint.c source/ai/*.c source/terminal/*.c source/util/*.c -o test_flint && ./test_flint && $(RM) test_flint
+TEST_CMD=$(CC) $(FLAGS) -DTEST_MODE tests/test_flint.c $(POSIX_SOURCE) -o test_flint && ./test_flint && $(RM) test_flint
 
 # \
 !ENDIF

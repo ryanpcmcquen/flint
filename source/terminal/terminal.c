@@ -6,8 +6,8 @@
 extern const terminal_adapter_t term_apple_terminal;
 extern const terminal_adapter_t term_iterm2;
 extern const terminal_adapter_t term_ghostty;
-extern const terminal_adapter_t term_alacritty_mac;
 extern const terminal_adapter_t term_kitty_mac;
+extern const terminal_adapter_t term_alacritty_mac;
 
 extern const terminal_adapter_t term_gnome_terminal;
 extern const terminal_adapter_t term_alacritty_linux;
@@ -22,9 +22,9 @@ static const terminal_adapter_t *all_terminals[] = {
 #if defined(__APPLE__)
     &term_iterm2,
     &term_ghostty,
+    &term_kitty_mac,
     &term_apple_terminal,
-    &term_alacritty_mac,
-    &term_kitty_mac
+    &term_alacritty_mac
 #elif defined(_WIN32)
     &term_windows_terminal,
     &term_powershell,
@@ -51,6 +51,7 @@ const terminal_adapter_t *terminal_detect_default(void) {
         if (str_contains_ignore_case(term_program, "iterm")) return &term_iterm2;
         if (str_contains_ignore_case(term_program, "apple_terminal")) return &term_apple_terminal;
         if (str_contains_ignore_case(term_program, "ghostty")) return &term_ghostty;
+        if (str_contains_ignore_case(term_program, "kitty")) return &term_kitty_mac;
         if (str_contains_ignore_case(term_program, "alacritty")) return &term_alacritty_mac;
     }
     if (getenv("KITTY_PID") || (term_program && str_contains_ignore_case(term_program, "kitty"))) {
@@ -63,12 +64,12 @@ const terminal_adapter_t *terminal_detect_default(void) {
         return &term_alacritty_mac;
     }
 
-    /* Fallback preference for macOS */
+    /* Fallback preference for macOS: iTerm2 -> Ghostty -> Kitty -> Apple Terminal */
     if (term_iterm2.is_available()) return &term_iterm2;
     if (term_ghostty.is_available()) return &term_ghostty;
+    if (term_kitty_mac.is_available()) return &term_kitty_mac;
     if (term_apple_terminal.is_available()) return &term_apple_terminal;
     if (term_alacritty_mac.is_available()) return &term_alacritty_mac;
-    if (term_kitty_mac.is_available()) return &term_kitty_mac;
     return &term_apple_terminal;
 
 #elif defined(_WIN32)
@@ -86,8 +87,8 @@ const terminal_adapter_t *terminal_detect_default(void) {
     if (color_term && strstr(color_term, "gnome-terminal")) return &term_gnome_terminal;
 
     if (term_gnome_terminal.is_available()) return &term_gnome_terminal;
-    if (term_alacritty_linux.is_available()) return &term_alacritty_linux;
     if (term_kitty_linux.is_available()) return &term_kitty_linux;
+    if (term_alacritty_linux.is_available()) return &term_alacritty_linux;
     if (term_konsole.is_available()) return &term_konsole;
     return &term_gnome_terminal;
 #endif

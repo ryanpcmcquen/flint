@@ -1,6 +1,9 @@
 #include "ai_adapter.h"
 #include "../util/fs.h"
 #include "../util/json.h"
+#include "../config/config.h"
+#include "../git/git.h"
+#include "../process/proc.h"
 #include <string.h>
 
 typedef struct {
@@ -10,6 +13,7 @@ typedef struct {
     char accomplishments[MAX_SUMMARY_LEN];
     time_t last_time;
     int prompt_count;
+    session_origin_t origin;
 } agy_scan_ctx_t;
 
 static int parse_transcript_line(const char *line, size_t len, size_t line_num, void *userdata) {
@@ -20,6 +24,13 @@ static int parse_transcript_line(const char *line, size_t len, size_t line_num, 
     if (!buf) return 0;
     strncpy(buf, line, len);
     buf[len] = '\0';
+
+    char source[64] = {0};
+    if (json_get_string(buf, "source", source, sizeof(source))) {
+        if (strcasecmp(source, "USER_EXPLICIT") == 0) {
+            ctx->origin = SESSION_ORIGIN_USER;
+        }
+    }
 
     char type[64] = {0};
     if (json_get_string(buf, "type", type, sizeof(type))) {
@@ -53,7 +64,6 @@ static int parse_transcript_line(const char *line, size_t len, size_t line_num, 
                 }
             }
         } else if (strcmp(type, "PLANNER_RESPONSE") == 0) {
-            /* Look for toolSummary to capture concrete accomplishments */
             char tool_summary[256] = {0};
             if (json_get_string(buf, "toolSummary", tool_summary, sizeof(tool_summary))) {
                 str_trim(tool_summary);
@@ -72,6 +82,7 @@ static int parse_transcript_line(const char *line, size_t len, size_t line_num, 
 }
 
 typedef struct {
+    const flint_config_t *cfg;
     int lookback_hours;
     time_t cutoff_time;
     session_list_t *list;
@@ -98,8 +109,9 @@ static int agy_dir_callback(const char *parent, const char *entry_name, bool is_
     memset(&ctx, 0, sizeof(ctx));
     strncpy(ctx.session_id, entry_name, sizeof(ctx.session_id) - 1);
     ctx.last_time = mtime;
+    ctx.origin = SESSION_ORIGIN_USER;
 
-    /* First read head of transcript for workspace metadata */
+    /* Read head of transcript for workspace metadata */
     char expanded_path[1024];
     fs_expand_path(transcript_path, expanded_path, sizeof(expanded_path));
     FILE *f = fopen(expanded_path, "rb");
@@ -109,7 +121,17 @@ static int agy_dir_callback(const char *parent, const char *entry_name, bool is_
         head_buf[r] = '\0';
         fclose(f);
 
-        /* Look for Active Workspaces or Command Working Directory */
+        if (strstr(head_buf, "\"source\": \"USER_EXPLICIT\"") ||
+            strstr(head_buf, "\"source\":\"USER_EXPLICIT\"")) {
+            ctx.origin = SESSION_ORIGIN_USER;
+        } else if (strstr(head_buf, "\"source\": \"AGENT\"") ||
+                   strstr(head_buf, "\"source\":\"AGENT\"") ||
+                   strstr(head_buf, "\"parent_conversation_id\"")) {
+            ctx.origin = SESSION_ORIGIN_AGENT;
+        } else {
+            ctx.origin = SESSION_ORIGIN_USER;
+        }
+
         const char *ws_tag = "Active Workspaces:";
         const char *cwd_tag = "Command Working Directory:";
         const char *found = strstr(head_buf, ws_tag);
@@ -130,23 +152,22 @@ static int agy_dir_callback(const char *parent, const char *entry_name, bool is_
     }
 
     size_t size = 0;
-    /* Read tail of transcript to be fast even with large files */
     char *tail_content = fs_read_tail(transcript_path, 64 * 1024, &size);
-    if (!tail_content) return 0;
-
-    jsonl_for_each_line(tail_content, parse_transcript_line, &ctx);
-    free(tail_content);
+    if (tail_content) {
+        jsonl_for_each_line(tail_content, parse_transcript_line, &ctx);
+        free(tail_content);
+    }
 
     session_t session;
     memset(&session, 0, sizeof(session));
     strncpy(session.id, ctx.session_id, sizeof(session.id) - 1);
     strncpy(session.tool_name, "Antigravity CLI", sizeof(session.tool_name) - 1);
     strncpy(session.tool_cmd, "agy", sizeof(session.tool_cmd) - 1);
+    session.origin = ctx.origin;
 
     if (ctx.workspace[0] != '\0') {
         strncpy(session.workspace, ctx.workspace, sizeof(session.workspace) - 1);
     } else {
-        /* Fallback: default to current directory or home */
         fs_expand_path("~", session.workspace, sizeof(session.workspace));
     }
 
@@ -163,13 +184,24 @@ static int agy_dir_callback(const char *parent, const char *entry_name, bool is_
         } else {
             snprintf(session.summary, sizeof(session.summary), "%s", req_snippet);
         }
+        session.was_merely_open = false;
     } else if (ctx.accomplishments[0] != '\0') {
         str_truncate_clean(session.summary, ctx.accomplishments, sizeof(session.summary) - 1);
+        session.was_merely_open = false;
     } else {
-        snprintf(session.summary, sizeof(session.summary), "Active session with %d interaction(s)", ctx.prompt_count);
+        /* Session was merely open yesterday without completed prompts */
+        session.was_merely_open = true;
+        snprintf(session.summary, sizeof(session.summary), "Session open (idle / no completed prompts yesterday)");
     }
 
-    snprintf(session.resume_cmd, sizeof(session.resume_cmd), "agy");
+    /* Format resume command using config wrapper, model, and effort */
+    config_format_tool_cmd(walker->cfg, "agy", session.id, session.resume_cmd, sizeof(session.resume_cmd));
+
+    /* Inspect Git status for workspace */
+    git_inspect_workspace(session.workspace, walker->lookback_hours, &session.git);
+
+    /* Check if already running */
+    session.is_already_running = proc_is_session_running("agy", session.workspace);
 
     session_list_add(walker->list, &session);
     return 0;
@@ -181,7 +213,7 @@ static bool antigravity_is_available(void) {
     return fs_dir_exists(brain_dir);
 }
 
-static int antigravity_discover(int lookback_hours, session_list_t *list) {
+static int antigravity_discover(const flint_config_t *cfg, int lookback_hours, session_list_t *list) {
     char brain_dir[MAX_PATH_LEN];
     fs_expand_path("~/.gemini/antigravity-cli/brain", brain_dir, sizeof(brain_dir));
     if (!fs_dir_exists(brain_dir)) {
@@ -192,6 +224,7 @@ static int antigravity_discover(int lookback_hours, session_list_t *list) {
     time_t cutoff = now - (lookback_hours * 3600);
 
     agy_dir_walker_t walker;
+    walker.cfg = cfg;
     walker.lookback_hours = lookback_hours;
     walker.cutoff_time = cutoff;
     walker.list = list;

@@ -1,6 +1,9 @@
 #include "ai_adapter.h"
 #include "../util/fs.h"
 #include "../util/json.h"
+#include "../config/config.h"
+#include "../git/git.h"
+#include "../process/proc.h"
 #include <string.h>
 
 static bool claude_is_available(void) {
@@ -12,6 +15,7 @@ static bool claude_is_available(void) {
 }
 
 typedef struct {
+    const flint_config_t *cfg;
     int lookback_hours;
     time_t cutoff_time;
     session_list_t *list;
@@ -34,12 +38,12 @@ static int claude_project_dir_cb(const char *parent, const char *entry_name, boo
     strncpy(session.id, entry_name, sizeof(session.id) - 1);
     strncpy(session.tool_name, "Claude Code", sizeof(session.tool_name) - 1);
     strncpy(session.tool_cmd, "claude", sizeof(session.tool_cmd) - 1);
+    session.origin = (strstr(entry_name, "subagent") != NULL || strstr(entry_name, "task") != NULL) ?
+                     SESSION_ORIGIN_AGENT : SESSION_ORIGIN_USER;
     session.last_active = mtime;
     fs_format_time(mtime, session.last_active_str, sizeof(session.last_active_str));
 
-    /* Decode project path if encoded as path-like name or check project metadata */
     if (entry_name[0] == '%') {
-        /* Encoded path: replace %2F with / */
         char decoded[MAX_PATH_LEN] = {0};
         const char *s = entry_name;
         char *d = decoded;
@@ -58,20 +62,23 @@ static int claude_project_dir_cb(const char *parent, const char *entry_name, boo
     }
 
     snprintf(session.summary, sizeof(session.summary), "Recent Claude Code activity in %s", entry_name);
-    snprintf(session.resume_cmd, sizeof(session.resume_cmd), "claude --resume");
+    config_format_tool_cmd(scan->cfg, "claude", session.id, session.resume_cmd, sizeof(session.resume_cmd));
+
+    git_inspect_workspace(session.workspace, scan->lookback_hours, &session.git);
+    session.is_already_running = proc_is_session_running("claude", session.workspace);
 
     session_list_add(scan->list, &session);
     return 0;
 }
 
-static int claude_discover(int lookback_hours, session_list_t *list) {
+static int claude_discover(const flint_config_t *cfg, int lookback_hours, session_list_t *list) {
     char claude_json[MAX_PATH_LEN];
     fs_expand_path("~/.claude.json", claude_json, sizeof(claude_json));
 
     time_t now = time(NULL);
     time_t cutoff = now - (lookback_hours * 3600);
 
-    /* Check ~/.claude.json modification or recent projects */
+    /* Check ~/.claude.json */
     if (fs_file_exists(claude_json)) {
         time_t mtime = fs_get_mod_time(claude_json);
         if (mtime >= cutoff) {
@@ -81,7 +88,6 @@ static int claude_discover(int lookback_hours, session_list_t *list) {
                 char projects_block[2048] = {0};
                 if (json_get_block(content, "mruProjects", projects_block, sizeof(projects_block)) ||
                     json_get_block(content, "projects", projects_block, sizeof(projects_block))) {
-                    /* Extract paths from array */
                     const char *p = projects_block;
                     while ((p = strchr(p, '"')) != NULL) {
                         p++;
@@ -99,14 +105,18 @@ static int claude_discover(int lookback_hours, session_list_t *list) {
                                 strncpy(session.id, "claude-session", sizeof(session.id) - 1);
                                 strncpy(session.tool_name, "Claude Code", sizeof(session.tool_name) - 1);
                                 strncpy(session.tool_cmd, "claude", sizeof(session.tool_cmd) - 1);
+                                session.origin = SESSION_ORIGIN_USER;
                                 strncpy(session.workspace, proj_path, sizeof(session.workspace) - 1);
                                 session.last_active = mtime;
                                 fs_format_time(mtime, session.last_active_str, sizeof(session.last_active_str));
                                 snprintf(session.summary, sizeof(session.summary), "Active Claude Code project");
-                                snprintf(session.resume_cmd, sizeof(session.resume_cmd), "claude");
+                                config_format_tool_cmd(cfg, "claude", session.id, session.resume_cmd, sizeof(session.resume_cmd));
+
+                                git_inspect_workspace(session.workspace, lookback_hours, &session.git);
+                                session.is_already_running = proc_is_session_running("claude", session.workspace);
 
                                 session_list_add(list, &session);
-                                break; /* Top active MRU project */
+                                break;
                             }
                         }
                         p = end + 1;
@@ -122,6 +132,7 @@ static int claude_discover(int lookback_hours, session_list_t *list) {
     fs_expand_path("~/.claude/projects", projects_dir, sizeof(projects_dir));
     if (fs_dir_exists(projects_dir)) {
         claude_scan_t scan;
+        scan.cfg = cfg;
         scan.lookback_hours = lookback_hours;
         scan.cutoff_time = cutoff;
         scan.list = list;
