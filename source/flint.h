@@ -74,6 +74,7 @@ typedef struct {
 
 /* Per-tool configuration options */
 typedef struct {
+    char name[MAX_NAME_LEN];            /* e.g., "agy", "claude", "codex" */
     char wrapper[MAX_NAME_LEN];         /* e.g., "graperoot" or empty */
     char model[MAX_NAME_LEN];           /* e.g., "gemini-3.8-flash", "claude-3-7-sonnet" */
     char effort[MAX_NAME_LEN];          /* e.g., "high", "medium", "low" */
@@ -88,9 +89,11 @@ typedef struct {
     bool open_in_tabs;
     bool auto_journal;
 
-    tool_config_t antigravity;
-    tool_config_t claude;
-    tool_config_t codex;
+    /* Ordered list of tool configurations. Each AI CLI adapter owns one
+     * entry; anything not listed gets no wrapper by default. */
+    tool_config_t *tool_configs;
+    size_t tool_config_count;
+    size_t tool_config_capacity;
 } flint_config_t;
 
 /* CLI runtime options */

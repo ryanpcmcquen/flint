@@ -2,6 +2,7 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 #include "../source/flint.h"
 #include "../source/config/config.h"
 #include "../source/git/git.h"
@@ -104,7 +105,7 @@ static void test_session_deduplication(void) {
 
     session_t s1 = {
         .last_active = 100,
-        .workspace = "/Users/code/flint",
+        .workspace = "test-project",
         .tool_cmd = "agy",
         .origin = SESSION_ORIGIN_USER
     };
@@ -113,7 +114,7 @@ static void test_session_deduplication(void) {
 
     session_t s2 = {
         .last_active = 200,
-        .workspace = "/Users/code/flint",
+        .workspace = "test-project",
         .tool_cmd = "agy",
         .origin = SESSION_ORIGIN_USER
     };
@@ -154,21 +155,94 @@ static void test_terminal_registry(void) {
 }
 
 static void test_config_and_wrappers(void) {
-    TEST("config_init_defaults");
+    TEST("config_init_defaults (no default wrapper)");
     flint_config_t cfg;
     config_init_defaults(&cfg);
-    assert(cfg.resume_mode == RESUME_MODE_USER);
-    assert(strcmp(cfg.antigravity.wrapper, "graperoot") == 0);
-    assert(strcmp(cfg.antigravity.model, "gemini-3.8-flash") == 0);
-    assert(strcmp(cfg.antigravity.effort, "high") == 0);
+    assert(cfg.tool_config_count == 3);
+    const tool_config_t *agy = config_find_tool(&cfg, "agy");
+    assert(agy != NULL);
+    assert(agy->wrapper[0] == '\0');
+    assert(strcmp(agy->model, "gemini-3.8-flash") == 0);
+    assert(strcmp(agy->effort, "high") == 0);
+    config_destroy(&cfg);
     PASS();
 
-    TEST("config_format_tool_cmd");
+    TEST("config_find_tool lookup");
+    flint_config_t cfg2;
+    config_init_defaults(&cfg2);
+    assert(config_find_tool(&cfg2, "agy") != NULL);
+    assert(config_find_tool(&cfg2, "claude") != NULL);
+    assert(config_find_tool(&cfg2, "codex") != NULL);
+    assert(config_find_tool(&cfg2, "grafareoot") == NULL);
+    config_destroy(&cfg2);
+    PASS();
+
+    TEST("config_format_tool_cmd without wrapper");
+    flint_config_t cfg3;
+    config_init_defaults(&cfg3);
     char cmd[512] = {0};
-    config_format_tool_cmd(&cfg, "agy", "session-123", cmd, sizeof(cmd));
-    assert(strstr(cmd, "graperoot agy") != NULL);
+    config_format_tool_cmd(&cfg3, "agy", "session-123", cmd, sizeof(cmd));
+    assert(strstr(cmd, "agy") != NULL);
     assert(strstr(cmd, "--model gemini-3.8-flash") != NULL);
     assert(strstr(cmd, "--effort high") != NULL);
+    config_destroy(&cfg3);
+    PASS();
+
+    TEST("config_format_tool_cmd with GrapeRoot-like wrapper");
+    flint_config_t cfg4;
+    config_init_defaults(&cfg4);
+    config_add_tool(&cfg4, "custom", "graperoot", "", "");
+    char cmd2[512] = {0};
+    config_format_tool_cmd(&cfg4, "custom", "session-999", cmd2, sizeof(cmd2));
+    assert(strstr(cmd2, "graperoot custom") != NULL);
+    config_destroy(&cfg4);
+    PASS();
+}
+
+static void test_config_file_parsing(void) {
+    TEST("config file parsing: [agy] wrapper, model, effort");
+    char path[MAX_PATH_LEN];
+    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    FILE *f = fopen(path, "w");
+    assert(f);
+    fprintf(f, "[agy]\n");
+    fprintf(f, "wrapper = graperoot\n");
+    fprintf(f, "model = gemini-3.1-flash\n");
+    fprintf(f, "effort = low\n");
+    fclose(f);
+
+    flint_config_t cfg;
+    config_init_defaults(&cfg);
+    assert(config_load(path, &cfg));
+    const tool_config_t *tc = config_find_tool(&cfg, "agy");
+    assert(tc != NULL);
+    assert(strcmp(tc->wrapper, "graperoot") == 0);
+    assert(strcmp(tc->model, "gemini-3.1-flash") == 0);
+    assert(strcmp(tc->effort, "low") == 0);
+    config_destroy(&cfg);
+    remove(path);
+    PASS();
+
+    TEST("config file parsing: [codex] alias section");
+    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    f = fopen(path, "w");
+    assert(f);
+    fprintf(f, "[codex]\n");
+    fprintf(f, "wrapper = wrapcodex\n");
+    fprintf(f, "model = o3-100\n");
+    fprintf(f, "effort = medium\n");
+    fclose(f);
+
+    flint_config_t cfg2;
+    config_init_defaults(&cfg2);
+    assert(config_load(path, &cfg2));
+    tc = config_find_tool(&cfg2, "codex");
+    assert(tc != NULL);
+    assert(strcmp(tc->wrapper, "wrapcodex") == 0);
+    assert(strcmp(tc->model, "o3-100") == 0);
+    assert(strcmp(tc->effort, "medium") == 0);
+    config_destroy(&cfg2);
+    remove(path);
     PASS();
 }
 
@@ -195,6 +269,7 @@ int main(void) {
     test_session_deduplication();
     test_terminal_registry();
     test_config_and_wrappers();
+    test_config_file_parsing();
     test_git_inspection();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);

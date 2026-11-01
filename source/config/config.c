@@ -14,32 +14,56 @@ void config_init_defaults(flint_config_t *cfg) {
     cfg->open_in_tabs = true;
     cfg->auto_journal = false;
 
-    /* Tool defaults */
-    strncpy(cfg->antigravity.wrapper, "graperoot", sizeof(cfg->antigravity.wrapper) - 1);
-    strncpy(cfg->antigravity.model, "gemini-3.8-flash", sizeof(cfg->antigravity.model) - 1);
-    strncpy(cfg->antigravity.effort, "high", sizeof(cfg->antigravity.effort) - 1);
-
-    strncpy(cfg->claude.wrapper, "", sizeof(cfg->claude.wrapper) - 1);
-    strncpy(cfg->claude.model, "claude-3-7-sonnet", sizeof(cfg->claude.model) - 1);
-    strncpy(cfg->claude.effort, "high", sizeof(cfg->claude.effort) - 1);
-
-    strncpy(cfg->codex.wrapper, "", sizeof(cfg->codex.wrapper) - 1);
-    strncpy(cfg->codex.model, "o3-mini", sizeof(cfg->codex.model) - 1);
-    strncpy(cfg->codex.effort, "high", sizeof(cfg->codex.effort) - 1);
+    /* Tool defaults.
+     *
+     * By default there is no wrapper binary: leave the `wrapper` field empty
+     * and Flint just runs the raw CLI. Use a `wrapper = <name>` entry under
+     * the tool's section in the config file to prepend a launcher like
+     * GrapeRoot (which normally wraps `agy`) around the command. */
+    config_add_tool(cfg, "agy", "", "gemini-3.8-flash", "high");
+    config_add_tool(cfg, "claude", "", "claude-3-7-sonnet", "high");
+    config_add_tool(cfg, "codex", "", "o3-mini", "high");
 }
 
-const tool_config_t *config_get_tool(const flint_config_t *cfg, const char *tool_cmd) {
+void config_add_tool(flint_config_t *cfg, const char *name, const char *wrapper,
+                     const char *model, const char *effort) {
+    if (!cfg || !name) return;
+
+    if (cfg->tool_config_count >= cfg->tool_config_capacity) {
+        size_t new_cap = cfg->tool_config_capacity ? cfg->tool_config_capacity * 2 : 8;
+        tool_config_t *new_items = (tool_config_t *)realloc(cfg->tool_configs,
+                                                            new_cap * sizeof(*new_items));
+        if (!new_items) return;
+        cfg->tool_configs = new_items;
+        cfg->tool_config_capacity = new_cap;
+    }
+
+    tool_config_t *tc = &cfg->tool_configs[cfg->tool_config_count++];
+    memset(tc, 0, sizeof(*tc));
+    strncpy(tc->name, name, sizeof(tc->name) - 1);
+    strncpy(tc->wrapper, wrapper, sizeof(tc->wrapper) - 1);
+    strncpy(tc->model, model, sizeof(tc->model) - 1);
+    strncpy(tc->effort, effort, sizeof(tc->effort) - 1);
+}
+
+const tool_config_t *config_find_tool(const flint_config_t *cfg, const char *tool_cmd) {
     if (!cfg || !tool_cmd) return NULL;
-    if (strcmp(tool_cmd, "agy") == 0 || strstr(tool_cmd, "antigravity")) {
-        return &cfg->antigravity;
-    }
-    if (strcmp(tool_cmd, "claude") == 0) {
-        return &cfg->claude;
-    }
-    if (strcmp(tool_cmd, "codex") == 0 || strstr(tool_cmd, "openai")) {
-        return &cfg->codex;
+    for (size_t i = 0; i < cfg->tool_config_count; i++) {
+        if (strcmp(cfg->tool_configs[i].name, tool_cmd) == 0) {
+            return &cfg->tool_configs[i];
+        }
     }
     return NULL;
+}
+
+void config_destroy(flint_config_t *cfg) {
+    if (!cfg) return;
+    if (cfg->tool_configs) {
+        free(cfg->tool_configs);
+        cfg->tool_configs = NULL;
+        cfg->tool_config_count = 0;
+        cfg->tool_config_capacity = 0;
+    }
 }
 
 void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
@@ -48,7 +72,7 @@ void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
     if (!out_cmd || out_size == 0) return;
     out_cmd[0] = '\0';
 
-    const tool_config_t *tc = config_get_tool(cfg, tool_cmd);
+    const tool_config_t *tc = config_find_tool(cfg, tool_cmd);
     char prefix[MAX_NAME_LEN * 2] = {0};
     if (tc && tc->wrapper[0] != '\0') {
         snprintf(prefix, sizeof(prefix), "%s ", tc->wrapper);
@@ -80,6 +104,19 @@ void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
     }
 }
 
+static const char *tool_name_for_section(const char *section) {
+    if (strcasecmp(section, "antigravity") == 0 || strcasecmp(section, "agy") == 0) {
+        return "agy";
+    }
+    if (strcasecmp(section, "claude") == 0) {
+        return "claude";
+    }
+    if (strcasecmp(section, "codex") == 0 || strcasecmp(section, "openai") == 0) {
+        return "codex";
+    }
+    return NULL;
+}
+
 static void parse_line(char *line, char *current_section, size_t section_size, flint_config_t *cfg) {
     str_trim(line);
     if (line[0] == '\0' || line[0] == '#' || line[0] == ';') {
@@ -94,8 +131,8 @@ static void parse_line(char *line, char *current_section, size_t section_size, f
             strncpy(current_section, line + 1, section_size - 1);
             current_section[section_size - 1] = '\0';
             str_trim(current_section);
-            return;
         }
+        return;
     }
 
     /* Key = Value */
@@ -109,46 +146,44 @@ static void parse_line(char *line, char *current_section, size_t section_size, f
     str_trim(key);
     str_trim(val);
 
-    tool_config_t *tc = NULL;
-    if (strcmp(current_section, "antigravity") == 0 || strcmp(current_section, "agy") == 0) {
-        tc = &cfg->antigravity;
-    } else if (strcmp(current_section, "claude") == 0) {
-        tc = &cfg->claude;
-    } else if (strcmp(current_section, "codex") == 0) {
-        tc = &cfg->codex;
-    }
-
-    if (tc) {
-        if (strcasecmp(key, "wrapper") == 0) {
-            strncpy(tc->wrapper, val, sizeof(tc->wrapper) - 1);
-        } else if (strcasecmp(key, "model") == 0) {
-            strncpy(tc->model, val, sizeof(tc->model) - 1);
-        } else if (strcasecmp(key, "effort") == 0) {
-            strncpy(tc->effort, val, sizeof(tc->effort) - 1);
+    /* Top-level global keys */
+    if (current_section[0] == '\0') {
+        if (strcasecmp(key, "terminal") == 0) {
+            strncpy(cfg->preferred_terminal, val, sizeof(cfg->preferred_terminal) - 1);
+        } else if (strcasecmp(key, "resume_mode") == 0) {
+            if (strcasecmp(val, "all") == 0) {
+                cfg->resume_mode = RESUME_MODE_ALL;
+            } else if (strcasecmp(val, "agent") == 0 || strcasecmp(val, "agents") == 0) {
+                cfg->resume_mode = RESUME_MODE_AGENT;
+            } else {
+                cfg->resume_mode = RESUME_MODE_USER;
+            }
+        } else if (strcasecmp(key, "journal_repo") == 0 || strcasecmp(key, "journal_path") == 0) {
+            fs_expand_path(val, cfg->journal_repo, sizeof(cfg->journal_repo));
+        } else if (strcasecmp(key, "lookback_hours") == 0) {
+            int h = atoi(val);
+            if (h > 0) cfg->lookback_hours = h;
+        } else if (strcasecmp(key, "open_in_tabs") == 0) {
+            cfg->open_in_tabs = (strcasecmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcasecmp(val, "yes") == 0);
+        } else if (strcasecmp(key, "auto_journal") == 0) {
+            cfg->auto_journal = (strcasecmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcasecmp(val, "yes") == 0);
         }
         return;
     }
 
-    /* Top-level global keys */
-    if (strcasecmp(key, "terminal") == 0) {
-        strncpy(cfg->preferred_terminal, val, sizeof(cfg->preferred_terminal) - 1);
-    } else if (strcasecmp(key, "resume_mode") == 0) {
-        if (strcasecmp(val, "all") == 0) {
-            cfg->resume_mode = RESUME_MODE_ALL;
-        } else if (strcasecmp(val, "agent") == 0 || strcasecmp(val, "agents") == 0) {
-            cfg->resume_mode = RESUME_MODE_AGENT;
-        } else {
-            cfg->resume_mode = RESUME_MODE_USER;
-        }
-    } else if (strcasecmp(key, "journal_repo") == 0 || strcasecmp(key, "journal_path") == 0) {
-        fs_expand_path(val, cfg->journal_repo, sizeof(cfg->journal_repo));
-    } else if (strcasecmp(key, "lookback_hours") == 0) {
-        int h = atoi(val);
-        if (h > 0) cfg->lookback_hours = h;
-    } else if (strcasecmp(key, "open_in_tabs") == 0) {
-        cfg->open_in_tabs = (strcasecmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcasecmp(val, "yes") == 0);
-    } else if (strcasecmp(key, "auto_journal") == 0) {
-        cfg->auto_journal = (strcasecmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcasecmp(val, "yes") == 0);
+    /* Tool section: [agy], [claude], [codex], or human-friendly aliases */
+    const char *tool = tool_name_for_section(current_section);
+    if (!tool) return;
+
+    tool_config_t *tc = (tool_config_t *)config_find_tool(cfg, tool);
+    if (!tc) return;
+
+    if (strcasecmp(key, "wrapper") == 0) {
+        strncpy(tc->wrapper, val, sizeof(tc->wrapper) - 1);
+    } else if (strcasecmp(key, "model") == 0) {
+        strncpy(tc->model, val, sizeof(tc->model) - 1);
+    } else if (strcasecmp(key, "effort") == 0) {
+        strncpy(tc->effort, val, sizeof(tc->effort) - 1);
     }
 }
 
@@ -226,10 +261,20 @@ bool config_create_default_file(const char *path) {
     fprintf(f, "# Lookback window in hours (default 24)\n");
     fprintf(f, "lookback_hours = 24\n\n");
     fprintf(f, "# ----------------------------------------------------------\n");
-    fprintf(f, "# AI CLI Tool Configurations\n");
-    fprintf(f, "# ----------------------------------------------------------\n\n");
-    fprintf(f, "[antigravity]\n");
-    fprintf(f, "wrapper = graperoot\n");
+    fprintf(f, "# Tool configurations\n");
+    fprintf(f, "# ----------------------------------------------------------\n");
+    fprintf(f, "# Each [tool] section configures one CLI the adapters discover (e.g.\n");
+    fprintf(f, "# [agy], [claude], [codex]). `wrapper` prepends a launcher binary to the\n");
+    fprintf(f, "# resume command, so GrapeRoot-like tools look like:\n");
+    fprintf(f, "#\n");
+    fprintf(f, "#   [agy]\n");
+    fprintf(f, "#   wrapper = graperoot\n");
+    fprintf(f, "#   model = gemini-3.8-flash\n");
+    fprintf(f, "#   effort = high\n");
+    fprintf(f, "#\n");
+    fprintf(f, "# Leave wrapper blank to run the CLI without a launcher.\n\n");
+    fprintf(f, "[agy]\n");
+    fprintf(f, "wrapper = \n");
     fprintf(f, "model = gemini-3.8-flash\n");
     fprintf(f, "effort = high\n\n");
     fprintf(f, "[claude]\n");
