@@ -101,15 +101,15 @@ $ flint
   What was worked on & accomplished:
   ────────────────────────────────────────────────────────────
 
-  [Antigravity CLI] /Users/ryanmcquen/code/flint
-    Last active: 2026-10-31 16:45
+  [Antigravity CLI] ~/code/project
+    Last active: yesterday
     ✓ Implemented cross-platform C99 Flint engine; Added terminal adapters
-    Resume command: cd "/Users/ryanmcquen/code/flint" && agy
+    Resume command: cd "~/code/project" && agy
 
-  [Claude Code] /Users/ryanmcquen/code/basque
-    Last active: 2026-10-31 15:30
+  [Claude Code] ~/code/basque
+    Last active: yesterday
     ✓ Refactored 2D sprite collisions and updated audio mixer
-    Resume command: cd "/Users/ryanmcquen/code/basque" && claude
+    Resume command: cd "~/code/basque" && claude
 
   ────────────────────────────────────────────────────────────
 
