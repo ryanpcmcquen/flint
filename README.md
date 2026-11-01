@@ -171,7 +171,3 @@ typedef struct terminal_adapter {
 ```
 
 ---
-
-## License
-
-ISC License. See LICENSE for details.
