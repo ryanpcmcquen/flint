@@ -3,6 +3,8 @@
 #include <string.h>
 #include <assert.h>
 #include "../source/flint.h"
+#include "../source/config/config.h"
+#include "../source/git/git.h"
 #include "../source/util/fs.h"
 #include "../source/util/json.h"
 #include "../source/terminal/terminal.h"
@@ -103,7 +105,8 @@ static void test_session_deduplication(void) {
     session_t s1 = {
         .last_active = 100,
         .workspace = "/Users/code/flint",
-        .tool_cmd = "agy"
+        .tool_cmd = "agy",
+        .origin = SESSION_ORIGIN_USER
     };
     strncpy(s1.summary, "Early commit", sizeof(s1.summary));
     session_list_add(&list, &s1);
@@ -111,7 +114,8 @@ static void test_session_deduplication(void) {
     session_t s2 = {
         .last_active = 200,
         .workspace = "/Users/code/flint",
-        .tool_cmd = "agy"
+        .tool_cmd = "agy",
+        .origin = SESSION_ORIGIN_USER
     };
     strncpy(s2.summary, "Later commit", sizeof(s2.summary));
     session_list_add(&list, &s2);
@@ -133,6 +137,8 @@ static void test_terminal_registry(void) {
     assert(t2 != NULL);
     const terminal_adapter_t *t3 = terminal_find("ghostty");
     assert(t3 != NULL);
+    const terminal_adapter_t *t4 = terminal_find("kitty");
+    assert(t4 != NULL);
 #elif defined(_WIN32)
     const terminal_adapter_t *t1 = terminal_find("windows-terminal");
     assert(t1 != NULL);
@@ -141,7 +147,41 @@ static void test_terminal_registry(void) {
 #else
     const terminal_adapter_t *t1 = terminal_find("gnome-terminal");
     assert(t1 != NULL);
+    const terminal_adapter_t *t2 = terminal_find("kitty");
+    assert(t2 != NULL);
 #endif
+    PASS();
+}
+
+static void test_config_and_wrappers(void) {
+    TEST("config_init_defaults");
+    flint_config_t cfg;
+    config_init_defaults(&cfg);
+    assert(cfg.resume_mode == RESUME_MODE_USER);
+    assert(strcmp(cfg.antigravity.wrapper, "graperoot") == 0);
+    assert(strcmp(cfg.antigravity.model, "gemini-3.8-flash") == 0);
+    assert(strcmp(cfg.antigravity.effort, "high") == 0);
+    PASS();
+
+    TEST("config_format_tool_cmd");
+    char cmd[512] = {0};
+    config_format_tool_cmd(&cfg, "agy", "session-123", cmd, sizeof(cmd));
+    assert(strstr(cmd, "graperoot agy") != NULL);
+    assert(strstr(cmd, "--model gemini-3.8-flash") != NULL);
+    assert(strstr(cmd, "--effort high") != NULL);
+    PASS();
+}
+
+static void test_git_inspection(void) {
+    TEST("git_is_repo on flint workspace");
+    assert(git_is_repo("."));
+
+    git_info_t info;
+    int res = git_inspect_workspace(".", 24, &info);
+    assert(res == 0);
+    assert(info.is_git_repo);
+    assert(info.branch[0] != '\0');
+    assert(info.suggested_focus[0] != '\0');
     PASS();
 }
 
@@ -154,6 +194,8 @@ int main(void) {
     test_path_utils();
     test_session_deduplication();
     test_terminal_registry();
+    test_config_and_wrappers();
+    test_git_inspection();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);
     return 0;

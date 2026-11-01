@@ -7,7 +7,7 @@ typedef struct ai_adapter {
     const char *name;
     const char *cli_binary;
     bool (*is_available)(void);
-    int (*discover_sessions)(int lookback_hours, session_list_t *list);
+    int (*discover_sessions)(const flint_config_t *cfg, int lookback_hours, session_list_t *list);
 } ai_adapter_t;
 
 /* Available AI adapters */
