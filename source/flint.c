@@ -82,17 +82,17 @@ static void print_banner(void) {
     int tool_pad = 76 - 7; /* 2 leading spaces + "F L I N T" */
     for (int i = 0; i < tool_pad; i++)
         printf(" ");
-    printf(ANSI_BOLD ANSI_CYAN "║" ANSI_RESET "\n");
+    printf(ANSI_BOLD ANSI_CYAN "  ║" ANSI_RESET "  " ANSI_YELLOW "F L I N T" ANSI_BOLD ANSI_CYAN "");
 
     /* Session manager text */
     printf(ANSI_BOLD ANSI_CYAN "  ║" ANSI_RESET " Morning Standup Brief & AI Session Manager");
     int sm_pad = 76 - 39; /* 39 = len of "Morning Standup Brief & AI Session Manager" */
     for (int i = 0; i < sm_pad; i++)
         printf(" ");
-    printf(ANSI_BOLD ANSI_CYAN "║" ANSI_RESET "\n");
+    printf(ANSI_BOLD ANSI_CYAN "  ║" ANSI_RESET " Morning Standup Brief & AI Session Manager");
 
     /* Date */
-    printf(ANSI_BOLD ANSI_CYAN "  ║" ANSI_RESET " %71s " ANSI_RESET ANSI_BOLD ANSI_CYAN "║" ANSI_RESET, date_buf);
+    printf(ANSI_BOLD ANSI_CYAN "  ║" ANSI_RESET " %71s " ANSI_BOLD ANSI_CYAN, date_buf);
 
     /* Bottom border */
     printf(ANSI_BOLD ANSI_CYAN "  ╚");
