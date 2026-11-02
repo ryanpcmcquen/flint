@@ -39,6 +39,71 @@ static void proc_exe_basename(const char *cmdline, char *out, size_t out_size) {
     out[len] = '\0';
 }
 
+/* Cached `ps -eo pid,command` output. Flint is a one-shot CLI, so a
+   process-lifetime cache avoids spawning ps once per session. */
+#define PROC_PS_CACHE_MAX_LINES 256
+static char proc_ps_cache[PROC_PS_CACHE_MAX_LINES][1024];
+static int proc_ps_cache_count = 0;
+
+static void proc_load_ps_cache(void) {
+    if (proc_ps_cache_count > 0) return;
+
+    char cmd[MAX_CMD_LEN * 2];
+    snprintf(cmd, sizeof(cmd), "ps -eo pid,command 2>/dev/null");
+
+    FILE *pipe = popen(cmd, "r");
+    if (!pipe) return;
+
+    char line[1024];
+    proc_ps_cache_count = 0;
+    while (fgets(line, sizeof(line), pipe)) {
+        if (proc_ps_cache_count >= PROC_PS_CACHE_MAX_LINES) break;
+        strncpy(proc_ps_cache[proc_ps_cache_count], line, 1023);
+        proc_ps_cache[proc_ps_cache_count][1023] = '\0';
+        proc_ps_cache_count++;
+    }
+    pclose(pipe);
+}
+
+/* Check a single cached ps line for a running process with the given
+   executable basename (exact, case-insensitive) in the given workspace. */
+static bool proc_line_matches(const char *line, const char *tool_cmd, const char *workspace_path) {
+    int pid = 0;
+    char prog[512] = {0};
+    if (sscanf(line, "%d %511[^\n]", &pid, prog) < 1) return false;
+    if (pid == (int)getpid()) return false;
+
+    char exe[512];
+    proc_exe_basename(prog, exe, sizeof(exe));
+    if (!proc_case_eq(exe, tool_cmd)) return false;
+
+    if (workspace_path && workspace_path[0] != '\0') {
+        if (strstr(prog, workspace_path) != NULL) return true;
+
+        /* Alternatively check cwd of process via lsof */
+        char lsof_cmd[256];
+        snprintf(lsof_cmd, sizeof(lsof_cmd), "lsof -a -d cwd -p %d -Fn 2>/dev/null", pid);
+        FILE *lpipe = popen(lsof_cmd, "r");
+        if (lpipe) {
+            char lline[MAX_PATH_LEN];
+            bool found = false;
+            while (fgets(lline, sizeof(lline), lpipe)) {
+                if (lline[0] == 'n') {
+                    char *path = lline + 1;
+                    str_trim(path);
+                    if (strcmp(path, workspace_path) == 0) {
+                        found = true;
+                        break;
+                    }
+                }
+            }
+            pclose(lpipe);
+            if (found) return true;
+        }
+    }
+    return false;
+}
+
 bool proc_is_session_running(const char *tool_cmd, const char *workspace_path) {
     if (!tool_cmd || !*tool_cmd) return false;
 
@@ -68,59 +133,16 @@ bool proc_is_session_running(const char *tool_cmd, const char *workspace_path) {
     return found;
 
 #else
-    /* POSIX (macOS & Linux): check ps output for the tool command */
-    char cmd[MAX_CMD_LEN * 2];
-    snprintf(cmd, sizeof(cmd), "ps -eo pid,command 2>/dev/null");
+    proc_load_ps_cache();
 
-    FILE *pipe = popen(cmd, "r");
-    if (!pipe) return false;
-
-    char line[1024];
-    pid_t my_pid = getpid();
     bool is_running = false;
-
-    while (fgets(line, sizeof(line), pipe)) {
-        int pid = 0;
-        char prog[512] = {0};
-        if (sscanf(line, "%d %511[^\n]", &pid, prog) >= 1) {
-            if (pid == (int)my_pid) continue;
-
-            /* Check if the command line's executable exactly matches the tool */
-            char exe[512];
-            proc_exe_basename(prog, exe, sizeof(exe));
-            if (proc_case_eq(exe, tool_cmd)) {
-                /* If workspace is specified, check if workspace path appears in command args */
-                if (workspace_path && workspace_path[0] != '\0') {
-                    if (strstr(prog, workspace_path) != NULL) {
-                        is_running = true;
-                        break;
-                    }
-
-                    /* Alternatively check cwd of process via lsof */
-                    char lsof_cmd[256];
-                    snprintf(lsof_cmd, sizeof(lsof_cmd), "lsof -a -d cwd -p %d -Fn 2>/dev/null", pid);
-                    FILE *lpipe = popen(lsof_cmd, "r");
-                    if (lpipe) {
-                        char lline[MAX_PATH_LEN];
-                        while (fgets(lline, sizeof(lline), lpipe)) {
-                            if (lline[0] == 'n') {
-                                char *path = lline + 1;
-                                str_trim(path);
-                                if (strcmp(path, workspace_path) == 0) {
-                                    is_running = true;
-                                    break;
-                                }
-                            }
-                        }
-                        pclose(lpipe);
-                        if (is_running) break;
-                    }
-                }
-            }
+    for (int i = 0; i < proc_ps_cache_count; i++) {
+        if (proc_line_matches(proc_ps_cache[i], tool_cmd, workspace_path)) {
+            is_running = true;
+            break;
         }
     }
 
-    pclose(pipe);
     return is_running;
 #endif
 }
