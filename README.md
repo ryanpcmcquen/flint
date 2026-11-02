@@ -16,6 +16,7 @@ When invoked in the morning, Flint:
 | :--- | :--- | :--- |
 | **Antigravity CLI** | `agy` | `~/.gemini/antigravity-cli/brain/` transcripts & logs |
 | **Claude Code** | `claude` | `~/.claude.json` projects & `~/.claude/projects/` |
+| **ChatGPT Codex** | `codex` | `~/.codex/` session store & project history |
 | **Cline** | `cline` | `~/.cline/data/sessions/<session-id>/.json` |
 | **OpenCode** | `opencode` | `~/.local/share/opencode/opencode.db` (`session_v2` table) |
 
