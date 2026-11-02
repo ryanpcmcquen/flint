@@ -29,8 +29,8 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
   - Config key `lookback_hours` (default 24), CLI `--hours <H>` and `-d/--days <N>`. The CLI overrides the config (`flint.c`, `main()`).
   - I ran it with a `lookback_hours` config file and the CLI flags. The sample data was inconclusive: the one transcript was 53 minutes old, which fits inside the 1-hour window. The override logic is straightforward when reading the code.
   - Small leftovers:
-    - `atoi()` silently ignores invalid input, so `--hours abc` is a no-op.
-    - The README doesn't document the config key.
+    - ~~`atoi()` silently ignores invalid input, so `--hours abc` is a no-op.~~ DONE: replaced with `parse_positive_int()` in `source/flint.c` for both `--days` and `--hours`.
+    - ~~The README doesn't document the config key.~~ DONE: added `lookback_hours` to the Configuration table in the README.
 
 ## Other issues found while reviewing
 
