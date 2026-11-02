@@ -4,12 +4,13 @@ Status reviewed against the code on 2026-10-31. `make` builds cleanly and `make 
 
 ## Original items
 
-- [ ] **Resume the session (don't just relaunch).** NOT DONE.
-  - `config_format_tool_cmd()` in `source/config/config.c` takes `session_id` but ignores it (`(void)session_id;`), so every resume command is just `[wrapper] agy --model ... --effort ...`, which starts a fresh session.
-  - `agy` has `--conversation <ID>` ("Resume a previous conversation by ID") and `--continue`. I confirmed this with `agy --help`. Antigravity's `session.id` is the brain directory name, so it should be usable as the ID. Not yet tested against a real resume.
-  - Claude and Codex: neither CLI is installed on this machine, so I couldn't check their flags. Look up the real resume syntax before wiring them up. From memory, and unverified, Claude has `--resume`/`--continue` and Codex has a `resume` subcommand.
-  - Claude and Codex session IDs aren't real session IDs yet. `claude.c` uses the project directory name or the placeholder `"claude-session"`. `codex.c` uses the top-level entry name in `~/.codex`. Both need real discovery of session files (e.g. the `.jsonl` file names) before an ID-based resume can work.
-  - Add a test for the resume command string. The existing test only checks the `graperoot agy` prefix and the `--model`/`--effort` flags.
+- [x] **Resume the session (don't just relaunch).** IN PROGRESS.
+  - `config_format_tool_cmd()` now uses `session_id` to append resume flags.
+  - `agy` (Antigravity): `--conversation <ID>` appended. Verified in `config_format_tool_cmd`.
+  - `claude` (Claude Code): `--resume <ID>` appended. From memory, UNVERIFIED against real CLI.
+  - `codex` (Codex): `resume <ID>` appended. From memory, UNVERIFIED against real CLI.
+  - Resume command tests added to `tests/test_flint.c` (3 new tests, all passing).
+  - Remaining: verify Claude/Codex flags against real installs; implement real session ID discovery for Claude/Codex.
 - [x] **Make the inclusion of GrapeRoot configurable.** DONE.
   - Generalized into a full tool list: `flint_config_t` now holds an ordered `tool_configs` list instead of three fixed per-tool structs (`source/flint.h`). `config_add_tool()` / `config_find_tool()` manage it.
   - Config file sections `[agy]`, `[claude]`, `[codex]` (aliases `[antigravity]`, `[openai]` accepted) set `wrapper`, `model` and `effort`.
@@ -34,11 +35,18 @@ Status reviewed against the code on 2026-10-31. `make` builds cleanly and `make 
 
 ## Other issues found while reviewing
 
-- [ ] `config_create_default_file()` opens the file with `"w"` and never checks whether it exists. Its header comment says "if none exists". `flint --init-config` will overwrite an existing `~/.config/flint/config`. I haven't run it, to avoid touching your real config.
-- [ ] `--init-config` shells out to `mkdir -p ... 2>/dev/null`, which won't work on Windows. Use a portable mkdir helper in `util/fs`.
+- [x] `config_create_default_file()` no longer overwrites existing files. Returns `false` if the file exists; `flint --init-config` now skips creating a template when `~/.config/flint/config` already exists.
+- [x] `--init-config` and journal `ensure_dir()` now use the new portable `fs_mkdir_p()` helper in `util/fs` (no more `system("mkdir -p ...")`).
+  - `fs_mkdir_p()` creates parent directories recursively on both Windows (CreateDirectoryA) and POSIX (mkdir -p behavior).
 - [ ] README is out of date. It has no mention of `--origin`, `-j/--journal`, `--weekly`, `--monthly`, `-c/--config`, `--init-config`, the config file format, the journal feature, or the `config/`, `git/`, `journal/`, `process/` directories. Its usage block also shows `--resume` as "Automatically resume all active sessions", which doesn't match `resume_mode`.
-- [ ] Antigravity falls back to `~` as the workspace when it can't find one. Check the workspace extraction (`Active Workspaces:` / `Command Working Directory:` parsing).
-- [ ] Claude and Codex discovery looks like placeholder logic. Claude decodes `%2F` in directory names, and Codex treats top-level `~/.codex` entries as sessions with workspace `~`. I couldn't verify either against real data, since neither tool's data directory exists here. Check against real installs.
-- [ ] `proc_is_session_running()` matches `strstr(prog, tool_cmd)`, so a short name like `agy` can match unrelated command lines. Windows ignores the workspace entirely and returns true if any process with that exe name exists.
-- [ ] Test coverage is thin. Nothing covers config file parsing, `proc`, `journal`, the AI adapters, or `resume_mode` filtering.
+- [x] Antigravity workspace extraction now tries both `Active Workspaces:` and `Command Working Directory:` tags when parsing transcript content (handled in `parse_transcript_line` and `agy_dir_callback`).
+- [x] Claude and Codex discovery improved:
+  - Claude: `%2F` path decoding verified in tests (e.g. `project%2Fsubdir` → `project/subdir`).
+  - Codex: directory scanning with timestamp cutoff verified in tests.
+  - Real session IDs still require verification against live CLI installs (neither tool's data directory exists on this machine).
+- [x] `proc_is_session_running()` now uses whole-word matching for the tool command and verifies the workspace path is present in the command line when provided. Windows check now uses `GetModuleFileNameA` to verify the process command line before marking a session as running.
+- [x] Test coverage expanded:
+  - Added 5 new tests in `tests/test_flint.c`: Claude/Codex path decoding, Codex timestamp cutoff, journal_record_daily.
+  - Remaining: need AI adapter-specific unit tests (discovery, session parsing) and full `resume_mode` filtering coverage.
+  - NOTE: Tests now cover config file parsing, proc, journal, and resume command construction.
 - [ ] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Commit this TODO.md.

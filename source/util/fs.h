@@ -33,6 +33,9 @@ char *fs_read_tail(const char *path, size_t max_bytes, size_t *out_size);
 /* Get last modification time of a file/directory */
 time_t fs_get_mod_time(const char *path);
 
+/* Recursively create directory path (like mkdir -p) */
+bool fs_mkdir_p(const char *path);
+
 /* Format timestamp into readable local time "YYYY-MM-DD HH:MM" */
 void fs_format_time(time_t t, char *out, size_t out_size);
 

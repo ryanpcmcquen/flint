@@ -129,9 +129,10 @@ static int parse_args(int argc, char **argv, flint_options_t *opts) {
             fs_expand_path("~/.config/flint/config", cfg_path, sizeof(cfg_path));
             char cfg_dir[MAX_PATH_LEN];
             fs_expand_path("~/.config/flint", cfg_dir, sizeof(cfg_dir));
-            char mkdir_cmd[MAX_PATH_LEN * 2];
-            snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\" 2>/dev/null", cfg_dir);
-            system(mkdir_cmd);
+            if (!fs_mkdir_p(cfg_dir)) {
+                fprintf(stderr, ANSI_RED "Error: Failed to create config directory: %s\\n" ANSI_RESET, cfg_dir);
+                exit(1);
+            }
 
             if (config_create_default_file(cfg_path)) {
                 printf(ANSI_GREEN "Created template configuration at %s\n" ANSI_RESET, cfg_path);

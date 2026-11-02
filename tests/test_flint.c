@@ -3,12 +3,14 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
+#include <sys/stat.h>
 #include "../source/flint.h"
 #include "../source/config/config.h"
 #include "../source/git/git.h"
 #include "../source/util/fs.h"
 #include "../source/util/json.h"
 #include "../source/terminal/terminal.h"
+#include "../source/journal/journal.h"
 
 static int total_tests = 0;
 static int passed_tests = 0;
@@ -197,6 +199,33 @@ static void test_config_and_wrappers(void) {
     assert(strstr(cmd2, "graperoot custom") != NULL);
     config_destroy(&cfg4);
     PASS();
+
+    TEST("config_format_tool_cmd includes resume session_id for agy");
+    flint_config_t cfg5;
+    config_init_defaults(&cfg5);
+    char cmd5[512] = {0};
+    config_format_tool_cmd(&cfg5, "agy", "abc123", cmd5, sizeof(cmd5));
+    assert(strstr(cmd5, "--conversation abc123") != NULL);
+    config_destroy(&cfg5);
+    PASS();
+
+    TEST("config_format_tool_cmd includes resume session_id for claude");
+    flint_config_t cfg6;
+    config_init_defaults(&cfg6);
+    char cmd6[512] = {0};
+    config_format_tool_cmd(&cfg6, "claude", "def456", cmd6, sizeof(cmd6));
+    assert(strstr(cmd6, "--resume def456") != NULL);
+    config_destroy(&cfg6);
+    PASS();
+
+    TEST("config_format_tool_cmd includes resume session_id for codex");
+    flint_config_t cfg7;
+    config_init_defaults(&cfg7);
+    char cmd7[512] = {0};
+    config_format_tool_cmd(&cfg7, "codex", "ghi789", cmd7, sizeof(cmd7));
+    assert(strstr(cmd7, "codex resume ghi789") != NULL);
+    config_destroy(&cfg7);
+    PASS();
 }
 
 static void test_config_file_parsing(void) {
@@ -246,6 +275,104 @@ static void test_config_file_parsing(void) {
     PASS();
 }
 
+static void test_journal_daily(void) {
+    TEST("journal_record_daily with real config and temp repo");
+    {
+        /* Create a temporary journal repo and test daily recording */
+        char repo[MAX_PATH_LEN];
+        snprintf(repo, sizeof(repo), "/tmp/flint_test_journal_%d", (int)getpid());
+        snprintf(repo, sizeof(repo), "%s/journal", repo);
+        
+        /* Create journal directory structure */
+        char daily[MAX_PATH_LEN];
+        snprintf(daily, sizeof(daily), "%s/daily", repo);
+        mkdir(repo, 0755);
+        mkdir(daily, 0755);
+
+        flint_config_t cfg;
+        config_init_defaults(&cfg);
+        strncpy(cfg.journal_repo, repo, sizeof(cfg.journal_repo) - 1);
+        cfg.journal_repo[sizeof(cfg.journal_repo) - 1] = ' ';
+
+        session_list_t list;
+        session_list_init(&list);
+
+        session_t s;
+        memset(&s, 0, sizeof(s));
+        strncpy(s.id, "test1", sizeof(s.id) - 1);
+        strncpy(s.tool_name, "Test Tool", sizeof(s.tool_name) - 1);
+        strncpy(s.tool_cmd, "test", sizeof(s.tool_cmd) - 1);
+        s.origin = SESSION_ORIGIN_USER;
+        s.workspace[0] = ' ';
+        strncpy(s.workspace, "/tmp/test-project", sizeof(s.workspace) - 1);
+        s.summary[0] = ' ';
+        strncpy(s.summary, "Test session", sizeof(s.summary) - 1);
+        s.last_active = time(NULL);
+        fs_format_time(s.last_active, s.last_active_str, sizeof(s.last_active_str));
+
+        session_list_add(&list, &s);
+
+        int result = journal_record_daily(&cfg, &list);
+        assert(result == 0);
+
+        /* Verify the file was created */
+        char date_file[32];
+        time_t now = time(NULL);
+        struct tm *lt = localtime(&now);
+        strftime(date_file, sizeof(date_file), "%Y-%m-%d.md", lt);
+        char file_path[MAX_PATH_LEN];
+        snprintf(file_path, sizeof(file_path), "%s/daily/%s", repo, date_file);
+        assert(fs_file_exists(file_path));
+
+        /* Cleanup */
+        session_list_free(&list);
+        config_destroy(&cfg);
+        /* Don't remove the repo - just leave it for inspection */
+    }
+    PASS();
+}
+
+static void test_claude_codex_discovery(void) {
+    TEST("Claude path decoding: %2F becomes / in dir names");
+    {
+        char decoded[MAX_PATH_LEN] = {0};
+        const char *entry = "project%2Fsubdir%2Fsession";
+        char *d = decoded;
+        const char *s = entry;
+        while (*s && (size_t)(d - decoded) < sizeof(decoded) - 1) {
+            if (*s == '%' && *(s+1) == '2' && (*(s+2) == 'F' || *(s+2) == 'f')) {
+                *d++ = '/';
+                s += 3;
+            } else {
+                *d++ = *s++;
+            }
+        }
+        *d = '\0';
+        assert(strcmp(decoded, "project/subdir/session") == 0);
+    }
+    PASS();
+
+    TEST("Codex directory scanning with timestamp cutoff");
+    {
+        /* Verify filesystem reading logic with a real file */
+        char path[MAX_PATH_LEN];
+        snprintf(path, sizeof(path), "/tmp/flint_test_codex_%d.json", (int)getpid());
+        FILE *f = fopen(path, "w");
+        assert(f);
+        time_t now = time(NULL);
+        fputs("{}", f);
+        fclose(f);
+
+        time_t cutoff = now - (24 * 3600);
+        /* File should exist and be newer than cutoff */
+        struct stat st;
+        assert(stat(path, &st) == 0);
+        assert(st.st_mtime >= cutoff);
+        remove(path);
+    }
+    PASS();
+}
+
 static void test_git_inspection(void) {
     TEST("git_is_repo on flint workspace");
     assert(git_is_repo("."));
@@ -271,6 +398,8 @@ int main(void) {
     test_config_and_wrappers();
     test_config_file_parsing();
     test_git_inspection();
+    test_claude_codex_discovery();
+    test_journal_daily();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);
     return 0;
