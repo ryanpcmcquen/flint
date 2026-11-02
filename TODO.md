@@ -1,10 +1,10 @@
 # Flint TODO
 
-Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make test` passes (25/25).
+Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make test` passes (26/26).
 
 ## Original items
 
-- [ ] **Resume the session (don't just relaunch).** NOT DONE.
+- [ ] **Resume the session (don't just relaunch).** IN PROGRESS. Antigravity resume wiring done this round (config_format_tool_cmd now emits `agy --conversation <ID> ...`; added tests, 26/26). Claude/Codex resume not started.
   - `config_format_tool_cmd()` in `source/config/config.c` takes `session_id` but the `agy` branch ignored it. Fixed: the `agy` branch now emits ` --conversation <session_id>` when a session id is present, so the resume command becomes `[wrapper] agy --conversation <ID> --model ... --effort ...`.
   - `agy` has `--conversation <ID>` ("Resume a previous conversation by ID") and `--continue`. I confirmed this with `agy --help`. Antigravity's `session.id` is the brain directory name, so it should be usable as the ID. Not yet tested against a real resume.
   - Claude and Codex: neither CLI is installed on this machine, so I couldn't check their flags. Look up the real resume syntax before wiring them up. From memory, and unverified, Claude has `--resume`/`--continue` and Codex has a `resume` subcommand.
