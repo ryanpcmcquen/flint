@@ -5,11 +5,11 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
 ## Original items
 
 - [ ] **Resume the session (don't just relaunch).** NOT DONE.
-  - `config_format_tool_cmd()` in `source/config/config.c` takes `session_id` but ignores it (`(void)session_id;`), so every resume command is just `[wrapper] agy --model ... --effort ...`, which starts a fresh session.
+  - `config_format_tool_cmd()` in `source/config/config.c` takes `session_id` but the `agy` branch ignored it. Fixed: the `agy` branch now emits ` --conversation <session_id>` when a session id is present, so the resume command becomes `[wrapper] agy --conversation <ID> --model ... --effort ...`.
   - `agy` has `--conversation <ID>` ("Resume a previous conversation by ID") and `--continue`. I confirmed this with `agy --help`. Antigravity's `session.id` is the brain directory name, so it should be usable as the ID. Not yet tested against a real resume.
   - Claude and Codex: neither CLI is installed on this machine, so I couldn't check their flags. Look up the real resume syntax before wiring them up. From memory, and unverified, Claude has `--resume`/`--continue` and Codex has a `resume` subcommand.
   - Claude and Codex session IDs aren't real session IDs yet. `claude.c` uses the project directory name or the placeholder `"claude-session"`. `codex.c` uses the top-level entry name in `~/.codex`. Both need real discovery of session files (e.g. the `.jsonl` file names) before an ID-based resume can work.
-  - Add a test for the resume command string. The existing test only checks the `graperoot agy` prefix and the `--model`/`--effort` flags.
+  - Add a test for the resume command string. DONE: added `config_format_tool_cmd resumes Antigravity sessions via --conversation` and `config_format_tool_cmd resumes OpenCode sessions` tests in `tests/test_flint.c`; `make test` now passes 26/26. The Antigravity resume command still isn't exercised end-to-end (needs a real `agy` install / conversation id).
 - [x] **Make the inclusion of GrapeRoot configurable.** DONE.
   - Generalized into a full tool list: `flint_config_t` now holds an ordered `tool_configs` list instead of three fixed per-tool structs (`source/flint.h`). `config_add_tool()` / `config_find_tool()` manage it.
   - Config file sections `[agy]`, `[claude]`, `[codex]` (aliases `[antigravity]`, `[openai]` accepted) set `wrapper`, `model` and `effort`.
