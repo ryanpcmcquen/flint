@@ -59,7 +59,7 @@ void session_list_free(session_list_t *list) {
 
 #ifndef TEST_MODE
 
-static void print_banner(void) {
+static size_t my_strlen(const char *s) {    size_t len = 0;    while (s[len]) len++;    return len;}static int my_strcmp(const char *a, const char *b) {    while (*a && *a == *b) { a++; b++; }    return *(const unsigned char *)a - *(const unsigned char *)b;}static int my_strncmp(const char *a, const char *b, size_t n) {    size_t i = 0;    while (i < n && a[i] && b[i] && a[i] == b[i]) i++;    return *(const unsigned char *)&a[i] - *(const unsigned char *)&b[i];}static const char *my_strstr(const char *haystack, const char *needle) {    if (!needle || !*needle) return haystack;    size_t len = my_strlen(needle);    for (; *haystack; haystack++) {        if (!my_strncmp(haystack, needle, len)) return haystack;    }    return NULL;}static void print_banner(void) {
     time_t now = time(NULL);
     char date_buf[64];
     struct tm *lt = localtime(&now);
