@@ -68,7 +68,6 @@ void config_destroy(flint_config_t *cfg) {
 
 void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
                             const char *session_id, char *out_cmd, size_t out_size) {
-    (void)session_id;
     if (!out_cmd || out_size == 0) return;
     out_cmd[0] = '\0';
 
@@ -87,20 +86,40 @@ void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --effort %s", tc->effort);
         }
         snprintf(out_cmd, out_size, "%sagy%s", prefix, flags);
+        if (session_id && session_id[0] != '\0') {
+            size_t remaining = out_size - strlen(out_cmd) - 1;
+            strncat(out_cmd, " --conversation ", remaining);
+            strncat(out_cmd, session_id, remaining);
+        }
     } else if (strcmp(tool_cmd, "claude") == 0) {
         char flags[256] = {0};
         if (tc && tc->model[0] != '\0') {
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --model %s", tc->model);
         }
         snprintf(out_cmd, out_size, "%sclaude%s", prefix, flags);
+        if (session_id && session_id[0] != '\0') {
+            size_t remaining = out_size - strlen(out_cmd) - 1;
+            strncat(out_cmd, " --resume ", remaining);
+            strncat(out_cmd, session_id, remaining);
+        }
     } else if (strcmp(tool_cmd, "codex") == 0) {
         char flags[256] = {0};
         if (tc && tc->model[0] != '\0') {
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --model %s", tc->model);
         }
-        snprintf(out_cmd, out_size, "%scodex%s", prefix, flags);
+        snprintf(out_cmd, out_size, "%scodex resume", prefix);
+        if (session_id && session_id[0] != '\0') {
+            size_t remaining = out_size - strlen(out_cmd) - 1;
+            strncat(out_cmd, " ", remaining);
+            strncat(out_cmd, session_id, remaining);
+        }
     } else {
         snprintf(out_cmd, out_size, "%s%s", prefix, tool_cmd);
+        if (session_id && session_id[0] != '\0') {
+            size_t remaining = out_size - strlen(out_cmd) - 1;
+            strncat(out_cmd, " ", remaining);
+            strncat(out_cmd, session_id, remaining);
+        }
     }
 }
 
@@ -238,6 +257,11 @@ bool config_create_default_file(const char *path) {
         fs_expand_path(path, target, sizeof(target));
     } else {
         fs_expand_path("~/.config/flint/config", target, sizeof(target));
+    }
+
+    /* Don't overwrite an existing config file. */
+    if (fs_file_exists(target)) {
+        return false;
     }
 
     FILE *f = fopen(target, "w");

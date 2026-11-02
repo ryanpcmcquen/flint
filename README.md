@@ -16,9 +16,8 @@ When invoked in the morning, Flint:
 | :--- | :--- | :--- |
 | **Antigravity CLI** | `agy` | `~/.gemini/antigravity-cli/brain/` transcripts & logs |
 | **Claude Code** | `claude` | `~/.claude.json` projects & `~/.claude/projects/` |
-| **ChatGPT Codex** | `codex` | `~/.codex/` session store & project history |
-
----
+| **Cline** | `cline` | `~/.cline/data/sessions/<session-id>/.json` |
+| **OpenCode** | `opencode` | `~/.local/share/opencode/opencode.db` (`session_v2` table) |
 
 ## Supported Operating Systems & Terminal Clients
 
@@ -104,12 +103,12 @@ $ flint
   [Antigravity CLI] ~/code/project
     Last active: yesterday
     ✓ Implemented cross-platform C99 Flint engine; Added terminal adapters
-    Resume command: cd "~/code/project" && agy
+    Resume command: cd "~/code/project" && agy --conversation abc123
 
   [Claude Code] ~/code/basque
     Last active: yesterday
     ✓ Refactored 2D sprite collisions and updated audio mixer
-    Resume command: cd "~/code/basque" && claude
+    Resume command: cd "~/code/basque" && claude --resume def456
 
   ────────────────────────────────────────────────────────────
 
@@ -120,29 +119,89 @@ Pressing **Enter** or typing **`Y`** immediately opens a new tab in your termina
 
 ---
 
+## Configuration File
+
+Flint reads configuration from `~/.config/flint/config` (or `~/.flintrc` as a fallback). Use `flint --init-config` to generate a default template.
+
+### Config Keys
+
+| Key | Default | Description |
+| :--- | :--- | :--- |
+| `terminal` | (auto-detect) | Preferred terminal client: iterm2, ghostty, kitty, apple-terminal, gnome-terminal, alacritty, konsole, windows-terminal, powershell |
+| `resume_mode` | `user` | Which sessions to resume: `user`, `all`, or `agent` |
+| `journal_repo` | `~/notes/flint-journal` | Markdown work-log / journal repository path |
+| `auto_journal` | `false` | Automatically record morning session log to journal |
+| `open_in_tabs` | `true` | Open sessions in terminal tabs instead of new windows |
+| `lookback_hours` | `24` | Lookback window in hours for active sessions |
+
+### Tool Configurations
+
+Each `[tool]` section configures one CLI that Flint discovers. The `wrapper` prepends a launcher binary to the resume command:
+
+```ini
+[agy]
+wrapper = graperoot
+model = gemini-3.8-flash
+effort = high
+```
+
+Leave `wrapper` blank to run the CLI without a launcher:
+
+```ini
+[agy]
+wrapper =
+model = gemini-3.8-flash
+effort = high
+```
+
+### Tool Aliases
+
+| Section | CLI Binary |
+| :--- | :--- |
+| `[agy]`, `[antigravity]` | `agy` |
+| `[claude]` | `claude` |
+| `[codex]`, `[openai]` | `codex` |
+
+---
+
 ## Architecture & Project Structure
 
 ```text
 flint/
 ├── Makefile                 # Polyglot cross-platform Makefile (GNU make + Windows nmake)
 ├── README.md                # Documentation & quick start guide
+├── TODO.md                  # Development TODO list
 ├── tests/
 │   └── test_flint.c         # Unit test suite for parser, filesystem & terminals
 └── source/
-    ├── flint.h              # Core data types (session_t, options_t)
+    ├── flint.h              # Core data types (session_t, options_t, flint_config_t)
     ├── flint.c              # CLI parsing, banner display & standup orchestration
-    ├── ai/                  # AI tool adapters
-    │   ├── ai_adapter.h     # Adapter interface
+    ├── config/
+    │   ├── config.h         # Configuration structure & tool config management
+    │   └── config.c         # Config parsing, defaults, resume command formatting
+    ├── ai/
+    │   ├── ai_adapter.h     # AI adapter interface
     │   ├── antigravity.c    # Antigravity CLI integration
     │   ├── claude.c         # Claude Code integration
-    │   └── codex.c          # OpenAI Codex CLI integration
-    ├── terminal/            # Terminal launchers & window/tab orchestration
+    │   ├── codex.c          # OpenAI Codex CLI integration
+    │   ├── cline.c          # Cline integration (~/.cline/data/sessions)
+    │   └── opencode.c       # OpenCode integration (sqlite3 session_v2)
+    ├── terminal/
     │   ├── terminal.h       # Terminal adapter interface
     │   ├── terminal.c       # Master registry & detection logic
     │   ├── macos.c          # Apple Terminal, iTerm2, Ghostty, Alacritty, Kitty
     │   ├── linux.c          # GNOME Terminal, Alacritty, Kitty, Konsole
     │   └── windows.c        # Windows Terminal (wt), PowerShell, Alacritty
-    └── util/                # Dependency-free C99 utility libraries
+    ├── git/
+    │   ├── git.h            # Git workspace inspection
+    │   └── git.c            # Git operations (repo detection, status, log)
+    ├── journal/
+    │   ├── journal.h        # Markdown journal generation
+    │   └── journal.c        # Daily, weekly, monthly journal compilation
+    ├── process/
+    │   ├── proc.h           # Process introspection
+    │   └── proc.c           # Session running detection (ps, lsof)
+    └── util/
         ├── fs.h / fs.c      # Cross-platform filesystem & path utilities
         └── json.h / json.c  # Fast, safe JSON & JSONL tokenizer
 ```
@@ -154,7 +213,7 @@ typedef struct ai_adapter {
     const char *name;
     const char *cli_binary;
     bool (*is_available)(void);
-    int (*discover_sessions)(int lookback_hours, session_list_t *list);
+    int (*discover_sessions)(const flint_config_t *cfg, int lookback_hours, session_list_t *list);
 } ai_adapter_t;
 ```
 
