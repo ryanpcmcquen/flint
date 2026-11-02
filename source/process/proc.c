@@ -1,6 +1,7 @@
 #include "proc.h"
 #include "../util/fs.h"
 #include <string.h>
+#include <ctype.h>
 
 #ifdef _WIN32
   #include <windows.h>
@@ -8,6 +9,35 @@
 #else
   #include <unistd.h>
 #endif
+
+/* Case-insensitive equality check. */
+static bool proc_case_eq(const char *a, const char *b) {
+    if (!a || !b) return false;
+    while (*a && *b) {
+        if (tolower((unsigned char)*a) != tolower((unsigned char)*b)) return false;
+        a++;
+        b++;
+    }
+    return (*a == '\0' && *b == '\0');
+}
+
+/* Copy the executable basename from a command line (first token, after any path).
+   e.g. "/usr/local/bin/agy --prompt x" -> "agy". */
+static void proc_exe_basename(const char *cmdline, char *out, size_t out_size) {
+    if (!cmdline || !out || out_size == 0) { if (out) out[0] = '\0'; return; }
+
+    const char *base = cmdline;
+    const char *slash = NULL;
+    for (const char *p = cmdline; *p; p++) {
+        if (*p == '/') slash = p;
+    }
+    base = slash ? slash + 1 : cmdline;
+
+    size_t len = strcspn(base, " \t");
+    if (len > out_size - 1) len = out_size - 1;
+    strncpy(out, base, len);
+    out[len] = '\0';
+}
 
 bool proc_is_session_running(const char *tool_cmd, const char *workspace_path) {
     if (!tool_cmd || !*tool_cmd) return false;
@@ -55,8 +85,10 @@ bool proc_is_session_running(const char *tool_cmd, const char *workspace_path) {
         if (sscanf(line, "%d %511[^\n]", &pid, prog) >= 1) {
             if (pid == (int)my_pid) continue;
 
-            /* Check if command line contains the tool name */
-            if (strstr(prog, tool_cmd) != NULL) {
+            /* Check if the command line's executable exactly matches the tool */
+            char exe[512];
+            proc_exe_basename(prog, exe, sizeof(exe));
+            if (proc_case_eq(exe, tool_cmd)) {
                 /* If workspace is specified, check if workspace path appears in command args */
                 if (workspace_path && workspace_path[0] != '\0') {
                     if (strstr(prog, workspace_path) != NULL) {
