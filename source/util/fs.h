@@ -21,6 +21,9 @@ void fs_expand_path(const char *path, char *out, size_t out_size);
 bool fs_file_exists(const char *path);
 bool fs_dir_exists(const char *path);
 
+/* Create a directory and any missing parents. Returns 0 on success, -1 on failure. */
+int fs_mkdir_p(const char *path);
+
 /* Safe cross-platform path join */
 void fs_path_join(const char *dir, const char *file, char *out, size_t out_size);
 
