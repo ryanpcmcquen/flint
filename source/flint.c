@@ -70,11 +70,35 @@ static void print_banner(void) {
     }
 
     printf("\n");
-    printf(ANSI_BOLD ANSI_CYAN "  ╔══════════════════════════════════════════════════════════════╗\n" ANSI_RESET);
-    printf(ANSI_BOLD ANSI_CYAN "  ║                        " ANSI_YELLOW "F L I N T" ANSI_CYAN "                             ║\n" ANSI_RESET);
-    printf(ANSI_BOLD ANSI_CYAN "  ║            " ANSI_RESET "Morning Standup Brief & AI Session Manager" ANSI_BOLD ANSI_CYAN "        ║\n" ANSI_RESET);
-    printf(ANSI_BOLD ANSI_CYAN "  ║                     " ANSI_DIM "%-24s" ANSI_RESET ANSI_BOLD ANSI_CYAN "         ║\n" ANSI_RESET, date_buf);
-    printf(ANSI_BOLD ANSI_CYAN "  ╚══════════════════════════════════════════════════════════════╝\n\n" ANSI_RESET);
+    /* Banner with fixed width of 76 chars to match longest content line */
+    printf("\n");
+    printf(ANSI_BOLD ANSI_CYAN "  ╔");
+    for (int i = 0; i < 76; i++)
+        printf(ANSI_BOLD ANSI_CYAN "═" ANSI_RESET);
+    printf(ANSI_BOLD ANSI_CYAN "╗" ANSI_RESET "\n");
+
+    /* Tool name with padding */
+    printf(ANSI_BOLD ANSI_CYAN "  ║" ANSI_RESET "  " ANSI_YELLOW "F L I N T" ANSI_RESET ANSI_BOLD ANSI_CYAN "");
+    int tool_pad = 76 - 7; /* 2 leading spaces + "F L I N T" */
+    for (int i = 0; i < tool_pad; i++)
+        printf(" ");
+    printf(ANSI_BOLD ANSI_CYAN "║" ANSI_RESET "\n");
+
+    /* Session manager text */
+    printf(ANSI_BOLD ANSI_CYAN "  ║" ANSI_RESET " Morning Standup Brief & AI Session Manager");
+    int sm_pad = 76 - 39; /* 39 = len of "Morning Standup Brief & AI Session Manager" */
+    for (int i = 0; i < sm_pad; i++)
+        printf(" ");
+    printf(ANSI_BOLD ANSI_CYAN "║" ANSI_RESET "\n");
+
+    /* Date */
+    printf(ANSI_BOLD ANSI_CYAN "  ║" ANSI_RESET " %71s " ANSI_RESET ANSI_BOLD ANSI_CYAN "║" ANSI_RESET, date_buf);
+
+    /* Bottom border */
+    printf(ANSI_BOLD ANSI_CYAN "  ╚");
+    for (int i = 0; i < 76; i++)
+        printf(ANSI_BOLD ANSI_CYAN "═" ANSI_RESET);
+    printf(ANSI_BOLD ANSI_CYAN "╝" ANSI_RESET "\n\n" ANSI_RESET);
 }
 
 static void print_usage(const char *prog_name) {
