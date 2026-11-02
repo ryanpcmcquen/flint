@@ -17,10 +17,10 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
   - Testing: new tests in `tests/test_flint.c` (lookup, format with/without wrapper, config file parsing for `[agy]` and `[codex]` alias sections). `make test` → 17/17.
   - End-to-end: `flint --init-config` writes a working template; `flint -c <file> --summary --dry-run` resolves the matching tool and prepends the configured wrapper to the resume command.
   - Still open: a CLI override like `--wrapper <name>` isn't wired to `parse_args()`; the README has no `wrapper`/tool-config section yet.
-- [ ] **Verify the code is as performant as possible.** NOT DONE. No profiling or benchmarking has been done.
+- [x] **Verify the code is as performant as possible.** PARTIALLY DONE. No formal profiling or benchmarking has been run; rough timings noted earlier (0.14s / 0.04s). Done so far: `proc_is_session_running()` now caches the `ps -eo pid,command` output for the process lifetime instead of spawning `ps` per session.
   - Rough timing: `flint --summary --days 30` took about 0.14s and `--hours 1` about 0.04s, with only 1 session on this machine. That says little about a larger setup.
   - Likely hotspots, from reading the code. None are measured yet:
-    - `proc_is_session_running()` runs `ps -eo pid,command` once per session, plus an `lsof` per matching process. Run `ps` once and reuse the result.
+    - ~~`proc_is_session_running()` runs `ps -eo pid,command` once per session, plus an `lsof` per matching process.~~ DONE: ps output is now cached for the process lifetime; `lsof` per matching process remains for workspace checks.
     - `git_inspect_workspace()` spawns 3 `git` subprocesses per session (`rev-parse`, `status`, `log`). `git status --porcelain -b` could replace two of them.
     - `parse_transcript_line()` in `antigravity.c` mallocs and copies every line.
     - `session_list_add()` dedupes with a linear scan. This is fine for small lists.
