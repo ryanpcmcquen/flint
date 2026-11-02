@@ -5,13 +5,7 @@
 
 static void ensure_dir(const char *dir) {
     if (!fs_dir_exists(dir)) {
-        char mkdir_cmd[MAX_PATH_LEN * 2];
-#ifdef _WIN32
-        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir \"%s\" 2>nul", dir);
-#else
-        snprintf(mkdir_cmd, sizeof(mkdir_cmd), "mkdir -p \"%s\" 2>/dev/null", dir);
-#endif
-        system(mkdir_cmd);
+        fs_mkdir_p(dir);
     }
 }
 

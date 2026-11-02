@@ -6,6 +6,7 @@
 #ifdef _WIN32
   #include <windows.h>
   #include <io.h>
+  #include <direct.h>
   #define stat _stat
 #else
   #include <unistd.h>
@@ -50,6 +51,43 @@ bool fs_file_exists(const char *path) {
         return (st.st_mode & S_IFDIR) == 0;
     }
     return false;
+}
+
+int fs_mkdir_p(const char *path) {
+    if (!path || !path[0]) return -1;
+
+    char buf[1024];
+    strncpy(buf, path, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+#ifdef _WIN32
+    char *copy = (char *)malloc(strlen(buf) + 1);
+    if (!copy) return -1;
+    strcpy(copy, buf);
+    for (char *p = copy + 1; *p; p++) {
+        if (*p == PATH_SEP) {
+            *p = '\0';
+            _mkdir(copy);
+            *p = PATH_SEP;
+        }
+    }
+    _mkdir(buf);
+    free(copy);
+#else
+    char *copy = (char *)malloc(strlen(buf) + 1);
+    if (!copy) return -1;
+    strcpy(copy, buf);
+    for (char *p = copy + 1; *p; p++) {
+        if (*p == PATH_SEP) {
+            *p = '\0';
+            mkdir(copy, 0777);
+            *p = PATH_SEP;
+        }
+    }
+    mkdir(copy, 0777);
+    free(copy);
+#endif
+    return 0;
 }
 
 bool fs_dir_exists(const char *path) {
