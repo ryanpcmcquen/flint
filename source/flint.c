@@ -1,5 +1,7 @@
 #include "flint.h"
 #include "ai/ai_adapter.h"
+#include "ai/mcp.h"
+#include "brief/brief.h"
 #include "terminal/terminal.h"
 #include "config/config.h"
 #include "git/git.h"
@@ -59,6 +61,23 @@ void session_list_free(session_list_t *list) {
 
 #ifndef TEST_MODE
 
+#define BANNER_INNER_WIDTH 62
+
+static void print_banner_line(const char *text, const char *style) {
+    size_t len = strlen(text);
+    size_t left = 0;
+    size_t right = 0;
+
+    if (len < BANNER_INNER_WIDTH) {
+        left = (BANNER_INNER_WIDTH - len) / 2;
+        right = BANNER_INNER_WIDTH - len - left;
+    }
+
+    printf(ANSI_BOLD ANSI_CYAN "  ║%*s", (int)left, "");
+    printf("%s%s", style, text);
+    printf(ANSI_RESET ANSI_BOLD ANSI_CYAN "%*s║\n" ANSI_RESET, (int)right, "");
+}
+
 static void print_banner(void) {
     time_t now = time(NULL);
     char date_buf[64];
@@ -71,9 +90,9 @@ static void print_banner(void) {
 
     printf("\n");
     printf(ANSI_BOLD ANSI_CYAN "  ╔══════════════════════════════════════════════════════════════╗\n" ANSI_RESET);
-    printf(ANSI_BOLD ANSI_CYAN "  ║                        " ANSI_YELLOW "F L I N T" ANSI_CYAN "                             ║\n" ANSI_RESET);
-    printf(ANSI_BOLD ANSI_CYAN "  ║            " ANSI_RESET "Morning Standup Brief & AI Session Manager" ANSI_BOLD ANSI_CYAN "        ║\n" ANSI_RESET);
-    printf(ANSI_BOLD ANSI_CYAN "  ║                     " ANSI_DIM "%-24s" ANSI_RESET ANSI_BOLD ANSI_CYAN "         ║\n" ANSI_RESET, date_buf);
+    print_banner_line("F L I N T", ANSI_YELLOW);
+    print_banner_line("Morning Standup Brief & AI Session Manager", "");
+    print_banner_line(date_buf, ANSI_DIM);
     printf(ANSI_BOLD ANSI_CYAN "  ╚══════════════════════════════════════════════════════════════╝\n\n" ANSI_RESET);
 }
 
@@ -91,6 +110,8 @@ static void print_usage(const char *prog_name) {
     printf("  -j, --journal           Record daily standup log to markdown Git repository\n");
     printf("      --weekly            Generate and display weekly standup summary\n");
     printf("      --monthly           Generate and display monthly standup summary\n");
+    printf("      --mcp               Query connected MCP tools (e.g. Slack) for today's focus\n");
+    printf("      --no-mcp            Skip MCP queries for this run\n");
     printf("  -c, --config <path>     Path to custom flint configuration file\n");
     printf("      --init-config       Generate default ~/.config/flint/config template\n");
     printf("  -n, --dry-run           Show commands that would be executed without launching\n");
@@ -101,6 +122,7 @@ static void print_usage(const char *prog_name) {
 
 static int parse_args(int argc, char **argv, flint_options_t *opts) {
     memset(opts, 0, sizeof(*opts));
+    opts->mcp_focus_override = -1;
 
     for (int i = 1; i < argc; i++) {
         const char *arg = argv[i];
@@ -122,6 +144,10 @@ static int parse_args(int argc, char **argv, flint_options_t *opts) {
             opts->weekly_summary = true;
         } else if (strcmp(arg, "--monthly") == 0) {
             opts->monthly_summary = true;
+        } else if (strcmp(arg, "--mcp") == 0) {
+            opts->mcp_focus_override = 1;
+        } else if (strcmp(arg, "--no-mcp") == 0) {
+            opts->mcp_focus_override = 0;
         } else if (strcmp(arg, "-l") == 0 || strcmp(arg, "--list-terminals") == 0) {
             opts->list_terminals = true;
         } else if (strcmp(arg, "--init-config") == 0) {
@@ -167,7 +193,7 @@ static void print_summary(const session_list_t *list) {
         return;
     }
 
-    printf(ANSI_BOLD "  What was worked on & accomplished:\n" ANSI_RESET);
+    printf(ANSI_BOLD "  Session details\n" ANSI_RESET);
     printf("  " ANSI_DIM "────────────────────────────────────────────────────────────" ANSI_RESET "\n");
 
     for (size_t i = 0; i < list->count; i++) {
@@ -198,9 +224,6 @@ static void print_summary(const session_list_t *list) {
                     }
                     while (*p == '\r' || *p == '\n') p++;
                 }
-            }
-            if (s->git.suggested_focus[0] != '\0') {
-                printf("    " ANSI_BOLD ANSI_YELLOW "💡 Focus:" ANSI_RESET " %s\n", s->git.suggested_focus);
             }
         }
 
@@ -268,6 +291,9 @@ int main(int argc, char **argv) {
     if (opts.lookback_hours > 0) {
         cfg.lookback_hours = opts.lookback_hours;
     }
+    if (opts.mcp_focus_override >= 0) {
+        cfg.mcp_focus = opts.mcp_focus_override != 0;
+    }
 
     if (opts.list_terminals) {
         terminal_print_list();
@@ -310,7 +336,41 @@ int main(int argc, char **argv) {
         }
     }
 
-    /* Print daily standup summary */
+    /* Presented overview + focus derived from where work was left */
+    if (all_sessions.count > 0) {
+        brief_t brief;
+        brief_build(&all_sessions, &brief);
+        brief_print_overview(&all_sessions, cfg.lookback_hours);
+        brief_print_focus(&brief);
+
+        if (cfg.mcp_focus) {
+            mcp_target_t target;
+            if (mcp_detect_connected(&all_sessions, &target)) {
+                printf(ANSI_DIM "  Consulting connected tools (%s) for today's priorities...\n" ANSI_RESET,
+                       target.servers);
+                fflush(stdout);
+
+                char context[16384];
+                char mcp_text[8192];
+                brief_focus_context(&brief, context, sizeof(context));
+
+                bool mcp_added = mcp_query_focus(&cfg, &target, context, mcp_text, sizeof(mcp_text));
+
+                if (mcp_added) {
+                    bool added_new = brief_add_mcp_focus(&brief, mcp_text,
+                                                        sizeof(brief.focus) / sizeof(brief.focus[0]),
+                                                        target.server_name);
+                    if (added_new) {
+                        brief_print_focus(&brief);
+                    }
+                } else {
+                    printf(ANSI_DIM "  Connected tools did not return any priorities.\n\n" ANSI_RESET);
+                }
+            }
+        }
+    }
+
+    /* Per-session details */
     print_summary(&all_sessions);
 
     /* Optionally record to markdown Git journal */

@@ -1,6 +1,6 @@
 # Flint TODO
 
-Status reviewed against the code on 2026-10-31. `make` builds cleanly and `make test` passes (13/13).
+Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make test` passes (25/25).
 
 ## Original items
 
@@ -34,9 +34,9 @@ Status reviewed against the code on 2026-10-31. `make` builds cleanly and `make 
 
 ## Other issues found while reviewing
 
-- [ ] `config_create_default_file()` opens the file with `"w"` and never checks whether it exists. Its header comment says "if none exists". `flint --init-config` will overwrite an existing `~/.config/flint/config`. I haven't run it, to avoid touching your real config.
+- [x] `config_create_default_file()` opens the file with `"w"` and never checks whether it exists. Fixed: it now returns false when the target already exists, matching its header contract.
 - [ ] `--init-config` shells out to `mkdir -p ... 2>/dev/null`, which won't work on Windows. Use a portable mkdir helper in `util/fs`.
-- [ ] README is out of date. It has no mention of `--origin`, `-j/--journal`, `--weekly`, `--monthly`, `-c/--config`, `--init-config`, the config file format, the journal feature, or the `config/`, `git/`, `journal/`, `process/` directories. Its usage block also shows `--resume` as "Automatically resume all active sessions", which doesn't match `resume_mode`.
+- [x] README is out of date. Addressed in the Scribe/MCP/brief work: added MCP/messaging section, `mcp_focus`/`--mcp`/`--no-mcp`, brief/focus sections, journal + configuration docs, and completed the usage block (`--origin`, `-j/--journal`, `--weekly`, `--monthly`, `--mcp`, `--no-mcp`, `-c`, `--init-config`). Remaining: full config-file format reference.
 - [ ] Antigravity falls back to `~` as the workspace when it can't find one. Check the workspace extraction (`Active Workspaces:` / `Command Working Directory:` parsing).
 - [ ] Claude and Codex discovery looks like placeholder logic. Claude decodes `%2F` in directory names, and Codex treats top-level `~/.codex` entries as sessions with workspace `~`. I couldn't verify either against real data, since neither tool's data directory exists here. Check against real installs.
 - [ ] `proc_is_session_running()` matches `strstr(prog, tool_cmd)`, so a short name like `agy` can match unrelated command lines. Windows ignores the workspace entirely and returns true if any process with that exe name exists.

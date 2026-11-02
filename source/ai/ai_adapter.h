@@ -14,6 +14,8 @@ typedef struct ai_adapter {
 extern const ai_adapter_t antigravity_adapter;
 extern const ai_adapter_t claude_adapter;
 extern const ai_adapter_t codex_adapter;
+extern const ai_adapter_t cline_adapter;
+extern const ai_adapter_t opencode_adapter;
 
 /* Master registry */
 size_t ai_get_adapters(const ai_adapter_t ***adapters);
