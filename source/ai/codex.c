@@ -82,7 +82,9 @@ const ai_adapter_t codex_adapter = {
 static const ai_adapter_t *all_adapters[] = {
     &antigravity_adapter,
     &claude_adapter,
-    &codex_adapter
+    &codex_adapter,
+    &cline_adapter,
+    &opencode_adapter
 };
 
 size_t ai_get_adapters(const ai_adapter_t ***adapters) {
