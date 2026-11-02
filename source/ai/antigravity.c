@@ -6,6 +6,13 @@
 #include "../process/proc.h"
 #include <string.h>
 
+#ifdef _WIN32
+  #include <direct.h>
+  #define getcwd _getcwd
+#else
+  #include <unistd.h>
+#endif
+
 typedef struct {
     char session_id[MAX_NAME_LEN];
     char workspace[MAX_PATH_LEN];
@@ -168,7 +175,15 @@ static int agy_dir_callback(const char *parent, const char *entry_name, bool is_
     if (ctx.workspace[0] != '\0') {
         strncpy(session.workspace, ctx.workspace, sizeof(session.workspace) - 1);
     } else {
-        fs_expand_path("~", session.workspace, sizeof(session.workspace));
+        /* No workspace recorded in the transcript: fall back to the
+           current working directory rather than the user's home dir. */
+        char cwd[MAX_PATH_LEN];
+        if (getcwd(cwd, sizeof(cwd))) {
+            strncpy(session.workspace, cwd, sizeof(session.workspace) - 1);
+            session.workspace[sizeof(session.workspace) - 1] = '\0';
+        } else {
+            fs_expand_path("~", session.workspace, sizeof(session.workspace));
+        }
     }
 
     session.last_active = ctx.last_time;
