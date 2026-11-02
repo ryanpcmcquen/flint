@@ -9,6 +9,8 @@
 #include "process/proc.h"
 #include "util/fs.h"
 
+#include <stdlib.h>
+
 #ifdef _WIN32
   #include <io.h>
   #define isatty _isatty
@@ -16,6 +18,17 @@
 #else
   #include <unistd.h>
 #endif
+
+/* Strict positive-integer parse. Returns false on empty/invalid input. */
+static bool parse_positive_int(const char *s, int *out) {
+    if (!s || !s[0]) return false;
+    char *end = NULL;
+    long val = strtol(s, &end, 10);
+    if (end == s || (end && *end != '\0')) return false;
+    if (val <= 0 || val > 87600) return false;
+    *out = (int)val;
+    return true;
+}
 
 void session_list_init(session_list_t *list) {
     if (!list) return;
@@ -168,11 +181,11 @@ static int parse_args(int argc, char **argv, flint_options_t *opts) {
         } else if ((strcmp(arg, "-t") == 0 || strcmp(arg, "--terminal") == 0) && i + 1 < argc) {
             strncpy(opts->target_terminal, argv[++i], sizeof(opts->target_terminal) - 1);
         } else if ((strcmp(arg, "-d") == 0 || strcmp(arg, "--days") == 0) && i + 1 < argc) {
-            int days = atoi(argv[++i]);
-            if (days > 0) opts->lookback_hours = days * 24;
+            int days = 0;
+            if (parse_positive_int(argv[++i], &days)) opts->lookback_hours = days * 24;
         } else if (strcmp(arg, "--hours") == 0 && i + 1 < argc) {
-            int hours = atoi(argv[++i]);
-            if (hours > 0) opts->lookback_hours = hours;
+            int hours = 0;
+            if (parse_positive_int(argv[++i], &hours)) opts->lookback_hours = hours;
         } else if ((strcmp(arg, "-w") == 0 || strcmp(arg, "--workspace") == 0) && i + 1 < argc) {
             fs_expand_path(argv[++i], opts->workspace_filter, sizeof(opts->workspace_filter));
         } else {
