@@ -239,6 +239,20 @@ static void test_config_and_wrappers(void) {
     assert(strstr(cmd4, "opencode --session ses_abc123") != NULL);
     config_destroy(&cfg6);
     PASS();
+
+    TEST("config_format_tool_cmd resumes Antigravity sessions via --conversation");
+    flint_config_t cfg7;
+    config_init_defaults(&cfg7);
+    char cmd5[512] = {0};
+    config_format_tool_cmd(&cfg7, "agy", "conv-abc123", cmd5, sizeof(cmd5));
+    assert(strstr(cmd5, "agy --conversation conv-abc123") != NULL);
+    assert(strstr(cmd5, "--model gemini-3.8-flash") != NULL);
+    assert(strstr(cmd5, "--effort high") != NULL);
+    char cmd6[512] = {0};
+    config_format_tool_cmd(&cfg7, "agy", "", cmd6, sizeof(cmd6));
+    assert(strstr(cmd6, "--conversation") == NULL);
+    config_destroy(&cfg7);
+    PASS();
 }
 
 static void test_config_file_parsing(void) {

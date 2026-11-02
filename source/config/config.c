@@ -81,7 +81,10 @@ void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
     }
 
     if (strcmp(tool_cmd, "agy") == 0) {
-        char flags[256] = {0};
+        char flags[512] = {0};
+        if (session_id && session_id[0] != '\0') {
+            snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --conversation %s", session_id);
+        }
         if (tc && tc->model[0] != '\0') {
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --model %s", tc->model);
         }
