@@ -21,7 +21,7 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
   - Rough timing: `flint --summary --days 30` took about 0.14s and `--hours 1` about 0.04s, with only 1 session on this machine. That says little about a larger setup.
   - Likely hotspots, from reading the code. None are measured yet:
     - ~~`proc_is_session_running()` runs `ps -eo pid,command` once per session, plus an `lsof` per matching process.~~ DONE: ps output is now cached for the process lifetime; `lsof` per matching process remains for workspace checks.
-    - `git_inspect_workspace()` spawns 3 `git` subprocesses per session (`rev-parse`, `status`, `log`). `git status --porcelain -b` could replace two of them.
+    - ~~`git_inspect_workspace()` spawns 3 `git` subprocesses per session (`rev-parse`, `status`, `log`).~~ DONE: replaced `rev-parse` + `status` with a single `git status --porcelain -b`; only `git log` remains per session.
     - `parse_transcript_line()` in `antigravity.c` mallocs and copies every line.
     - `session_list_add()` dedupes with a linear scan. This is fine for small lists.
   - Profile with a realistic number of sessions before optimizing.
@@ -41,4 +41,4 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
 - [ ] Claude and Codex discovery looks like placeholder logic. Claude decodes `%2F` in directory names, and Codex treats top-level `~/.codex` entries as sessions with workspace `~`. I couldn't verify either against real data, since neither tool's data directory exists here. Check against real installs.
 - [x] `proc_is_session_running()` matches `strstr(prog, tool_cmd)`, so a short name like `agy` can match unrelated command lines. Fixed: POSIX branch now extracts the executable basename from the first command token (after any path) and compares it to the tool name case-insensitively; workspace fallback (lsof cwd check) unchanged. Windows branch already compared exact exe names (`tool_cmd` vs `tool_cmd.exe`) and ignores the workspace — left as a known limitation.
 - [ ] Test coverage is thin. Nothing covers config file parsing, `proc`, `journal`, the AI adapters, or `resume_mode` filtering.
-- [ ] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Commit this TODO.md.
+- [x] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Committed this TODO.md.
