@@ -4,6 +4,8 @@
 #include <assert.h>
 #include <unistd.h>
 #include "../source/flint.h"
+#include "../source/ai/mcp.h"
+#include "../source/brief/brief.h"
 #include "../source/config/config.h"
 #include "../source/git/git.h"
 #include "../source/util/fs.h"
@@ -43,6 +45,25 @@ static void test_json_primitives(void) {
     bool active = false;
     assert(json_get_bool(json, "active", &active));
     assert(active == true);
+    PASS();
+
+    TEST("json_get_long_long");
+    const char *big_json = "{\"updated\": 1793641153470}";
+    long long updated = 0;
+    assert(json_get_long_long(big_json, "updated", &updated));
+    assert(updated == 1793641153470LL);
+    PASS();
+
+    TEST("json_next_object");
+    const char *objects = "[{\"name\": \"one\"}, {\"name\": \"two\"}]";
+    const char *end = NULL;
+    const char *first = json_next_object(objects, &end);
+    assert(first != NULL);
+    assert(end != NULL);
+    assert(strncmp(first, "{\"name\": \"one\"}", (size_t)(end - first)) == 0);
+    const char *second = json_next_object(end, &end);
+    assert(second != NULL);
+    assert(strncmp(second, "{\"name\": \"two\"}", (size_t)(end - second)) == 0);
     PASS();
 }
 
@@ -158,7 +179,8 @@ static void test_config_and_wrappers(void) {
     TEST("config_init_defaults (no default wrapper)");
     flint_config_t cfg;
     config_init_defaults(&cfg);
-    assert(cfg.tool_config_count == 3);
+    assert(cfg.tool_config_count == 5);
+    assert(cfg.mcp_focus == true);
     const tool_config_t *agy = config_find_tool(&cfg, "agy");
     assert(agy != NULL);
     assert(agy->wrapper[0] == '\0');
@@ -173,6 +195,8 @@ static void test_config_and_wrappers(void) {
     assert(config_find_tool(&cfg2, "agy") != NULL);
     assert(config_find_tool(&cfg2, "claude") != NULL);
     assert(config_find_tool(&cfg2, "codex") != NULL);
+    assert(config_find_tool(&cfg2, "cline") != NULL);
+    assert(config_find_tool(&cfg2, "opencode") != NULL);
     assert(config_find_tool(&cfg2, "grafareoot") == NULL);
     config_destroy(&cfg2);
     PASS();
@@ -196,6 +220,24 @@ static void test_config_and_wrappers(void) {
     config_format_tool_cmd(&cfg4, "custom", "session-999", cmd2, sizeof(cmd2));
     assert(strstr(cmd2, "graperoot custom") != NULL);
     config_destroy(&cfg4);
+    PASS();
+
+    TEST("config_format_tool_cmd resumes Cline sessions");
+    flint_config_t cfg5;
+    config_init_defaults(&cfg5);
+    char cmd3[512] = {0};
+    config_format_tool_cmd(&cfg5, "cline", "session-555", cmd3, sizeof(cmd3));
+    assert(strstr(cmd3, "cline --id session-555") != NULL);
+    config_destroy(&cfg5);
+    PASS();
+
+    TEST("config_format_tool_cmd resumes OpenCode sessions");
+    flint_config_t cfg6;
+    config_init_defaults(&cfg6);
+    char cmd4[512] = {0};
+    config_format_tool_cmd(&cfg6, "opencode", "ses_abc123", cmd4, sizeof(cmd4));
+    assert(strstr(cmd4, "opencode --session ses_abc123") != NULL);
+    config_destroy(&cfg6);
     PASS();
 }
 
@@ -244,7 +286,91 @@ static void test_config_file_parsing(void) {
     config_destroy(&cfg2);
     remove(path);
     PASS();
+
+    TEST("config file parsing: mcp_focus");
+    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    f = fopen(path, "w");
+    assert(f);
+    fprintf(f, "mcp_focus = false\n");
+    fclose(f);
+
+    flint_config_t cfg3;
+    config_init_defaults(&cfg3);
+    assert(config_load(path, &cfg3));
+    assert(cfg3.mcp_focus == false);
+    config_destroy(&cfg3);
+    remove(path);
+    PASS();
 }
+
+static void test_brief_and_mcp(void) {
+    TEST("brief_build ranks unfinished work first");
+    session_list_t list;
+    session_list_init(&list);
+
+    session_t older = {0};
+    older.last_active = 100;
+    strncpy(older.workspace, "/tmp/alpha", sizeof(older.workspace) - 1);
+    strncpy(older.tool_name, "Cline", sizeof(older.tool_name) - 1);
+    strncpy(older.summary, "Older alpha work", sizeof(older.summary) - 1);
+
+    session_t newer = {0};
+    newer.last_active = 200;
+    strncpy(newer.workspace, "/tmp/alpha", sizeof(newer.workspace) - 1);
+    strncpy(newer.tool_name, "OpenCode", sizeof(newer.tool_name) - 1);
+    strncpy(newer.summary, "Newer alpha work", sizeof(newer.summary) - 1);
+    newer.git.is_git_repo = true;
+    newer.git.uncommitted_count = 2;
+    strncpy(newer.git.suggested_focus, "Finish uncommitted changes in source.c",
+            sizeof(newer.git.suggested_focus) - 1);
+
+    session_t beta = {0};
+    beta.last_active = 150;
+    strncpy(beta.workspace, "/Users/test/beta", sizeof(beta.workspace) - 1);
+    strncpy(beta.tool_name, "Codex", sizeof(beta.tool_name) - 1);
+    strncpy(beta.summary, "Refactor the parser", sizeof(beta.summary) - 1);
+
+    session_list_add(&list, &older);
+    session_list_add(&list, &newer);
+    session_list_add(&list, &beta);
+
+    brief_t brief;
+    brief_build(&list, &brief);
+    assert(brief.focus_count == 2);
+    assert(strcmp(brief.focus[0].workspace, "/tmp/alpha") == 0);
+    assert(strstr(brief.focus[0].text, "uncommitted") != NULL);
+    assert(strcmp(brief.focus[1].workspace, "/Users/test/beta") == 0);
+    assert(strstr(brief.focus[1].text, "Refactor the parser") != NULL);
+
+    session_list_free(&list);
+    PASS();
+
+    TEST("mcp_parse_connected_servers");
+    const char *mcp_json =
+        "{\"location\":{\"directory\":\"/tmp\"},\"data\":["
+        "{\"name\":\"slack\",\"status\":{\"status\":\"connected\"}},"
+        "{\"name\":\"linear\",\"status\":{\"status\":\"disabled\"}},"
+        "{\"name\":\"notion\",\"status\":{\"status\":\"connected\"}}]}";
+    char servers[256] = {0};
+    assert(mcp_parse_connected_servers(mcp_json, servers, sizeof(servers)));
+    assert(strcmp(servers, "slack, notion") == 0);
+
+    const char *no_mcp = "{\"data\":[{\"name\":\"slack\",\"status\":{\"status\":\"disabled\"}}]}";
+    assert(!mcp_parse_connected_servers(no_mcp, servers, sizeof(servers)));
+    PASS();
+
+    TEST("brief_add_mcp_focus adds bullets");
+    brief_t brief2;
+    memset(&brief2, 0, sizeof(brief2));
+    bool added = brief_add_mcp_focus(&brief2, "- Review the Slack thread\n- Finish the README changes\n", 5, "slack");
+    assert(added);
+    assert(brief2.focus_count == 2);
+    assert(strcmp(brief2.focus[0].text, "Review the Slack thread") == 0);
+    assert(strcmp(brief2.focus[0].workspace, "slack") == 0);
+    assert(strcmp(brief2.focus[1].text, "Finish the README changes") == 0);
+    PASS();
+}
+
 
 static void test_git_inspection(void) {
     TEST("git_is_repo on flint workspace");
@@ -270,6 +396,7 @@ int main(void) {
     test_terminal_registry();
     test_config_and_wrappers();
     test_config_file_parsing();
+    test_brief_and_mcp();
     test_git_inspection();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);
