@@ -12,6 +12,7 @@
 #include "../source/util/json.h"
 #include "../source/terminal/terminal.h"
 #include "../source/journal/journal.h"
+#include "../source/process/proc.h"
 
 static int total_tests = 0;
 static int passed_tests = 0;
@@ -407,6 +408,14 @@ static void test_brief_and_mcp(void) {
 }
 
 
+static void test_proc_running(void) {
+    TEST("proc_is_session_running exact tool matching");
+    /* The test binary itself runs as "test_flint"; an exact (non-substring) match
+       on the shorter name "flint" must NOT hit. Regression test for the substring bug. */
+    assert(proc_is_session_running("flint", NULL) == false);
+    PASS();
+}
+
 static void test_journal_generation(void) {
     TEST("journal_record_daily writes daily log");
     char repo[MAX_PATH_LEN];
@@ -494,6 +503,7 @@ int main(void) {
     test_brief_and_mcp();
     test_git_inspection();
     test_journal_generation();
+    test_proc_running();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);
     return 0;

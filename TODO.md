@@ -47,5 +47,5 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
     - Half-wired remnant: `flint_config_t.open_in_tabs` is parsed, written to the config template, and documented, but never consumed by resume/launch logic.
     - No debug leftovers (DEBUG/FIXME/XXX/HACK) found in source.
     - No duplicated logic introduced by the merge resolution (fs_mkdir_p conflict resolved to single `int` version).
-- [ ] Test coverage is thin. Nothing covers config file parsing, `proc`, the AI adapters, or `resume_mode` filtering. Added journal generation tests (`journal_record_daily`, `journal_generate_weekly`, `journal_generate_monthly`) — suite now 31/31; `proc`, adapters, and `resume_mode` filtering still uncovered.
+- [ ] Test coverage is thin. Nothing covers config file parsing, the AI adapters, or `resume_mode` filtering. Added journal generation tests (now 31/31) and a `proc_is_session_running` exact-match regression test (now 32/32); `proc` internals, adapters, and `resume_mode` filtering still uncovered.
 - [x] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Committed this TODO.md.
