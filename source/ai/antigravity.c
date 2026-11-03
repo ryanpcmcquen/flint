@@ -21,16 +21,19 @@ typedef struct {
     time_t last_time;
     int prompt_count;
     session_origin_t origin;
+    /* Scratch buffer for jsonl line parsing (reused, avoids per-line malloc) */
+    char line_buf[1024];
 } agy_scan_ctx_t;
 
 static int parse_transcript_line(const char *line, size_t len, size_t line_num, void *userdata) {
     (void)line_num;
     agy_scan_ctx_t *ctx = (agy_scan_ctx_t *)userdata;
 
-    char *buf = (char *)malloc(len + 1);
-    if (!buf) return 0;
-    strncpy(buf, line, len);
-    buf[len] = '\0';
+    /* Reuse the scan context scratch buffer instead of malloc/free per line */
+    if (len + 1 >= (int)sizeof(ctx->line_buf)) return 0;
+    memcpy(ctx->line_buf, line, len);
+    ctx->line_buf[len] = '\0';
+    char *buf = ctx->line_buf;
 
     char source[64] = {0};
     if (json_get_string(buf, "source", source, sizeof(source))) {
