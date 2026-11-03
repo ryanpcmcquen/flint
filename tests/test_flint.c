@@ -11,6 +11,7 @@
 #include "../source/util/fs.h"
 #include "../source/util/json.h"
 #include "../source/terminal/terminal.h"
+#include "../source/journal/journal.h"
 
 static int total_tests = 0;
 static int passed_tests = 0;
@@ -406,6 +407,66 @@ static void test_brief_and_mcp(void) {
 }
 
 
+static void test_journal_generation(void) {
+    TEST("journal_record_daily writes daily log");
+    char repo[MAX_PATH_LEN];
+    snprintf(repo, sizeof(repo), "/tmp/flint_journal_test_%d", (int)getpid());
+    flint_config_t cfg;
+    config_init_defaults(&cfg);
+    strncpy(cfg.journal_repo, repo, sizeof(cfg.journal_repo) - 1);
+    cfg.journal_repo[sizeof(cfg.journal_repo) - 1] = '\0';
+
+    session_list_t list;
+    session_list_init(&list);
+    session_t s;
+    memset(&s, 0, sizeof(s));
+    strncpy(s.tool_name, "Claude Code", sizeof(s.tool_name) - 1);
+    strncpy(s.workspace, "/tmp/flint_ws_test", sizeof(s.workspace) - 1);
+    strncpy(s.summary, "Did a thing", sizeof(s.summary) - 1);
+    s.origin = SESSION_ORIGIN_USER;
+    session_list_add(&list, &s);
+
+    int res = journal_record_daily(&cfg, &list);
+    assert(res == 0);
+
+    time_t now = time(NULL);
+    struct tm *lt = localtime(&now);
+    char date_file[32];
+    strftime(date_file, sizeof(date_file), "%Y-%m-%d.md", lt);
+    char daily_dir[MAX_PATH_LEN];
+    fs_path_join(repo, "daily", daily_dir, sizeof(daily_dir));
+    char path[MAX_PATH_LEN];
+    fs_path_join(daily_dir, date_file, path, sizeof(path));
+    assert(fs_file_exists(path));
+
+    session_list_free(&list);
+    PASS();
+
+    TEST("journal_generate_weekly writes weekly summary");
+    int wres = journal_generate_weekly(&cfg);
+    assert(wres == 0);
+    char weekly_dir[MAX_PATH_LEN];
+    fs_path_join(repo, "weekly", weekly_dir, sizeof(weekly_dir));
+    char week_file[64];
+    strftime(week_file, sizeof(week_file), "%Y-W%W.md", lt);
+    char week_path[MAX_PATH_LEN];
+    fs_path_join(weekly_dir, week_file, week_path, sizeof(week_path));
+    assert(fs_file_exists(week_path));
+    PASS();
+
+    TEST("journal_generate_monthly writes monthly summary");
+    int mres = journal_generate_monthly(&cfg);
+    assert(mres == 0);
+    char monthly_dir[MAX_PATH_LEN];
+    fs_path_join(repo, "monthly", monthly_dir, sizeof(monthly_dir));
+    char mon_file[64];
+    strftime(mon_file, sizeof(mon_file), "%Y-%m.md", lt);
+    char mon_path[MAX_PATH_LEN];
+    fs_path_join(monthly_dir, mon_file, mon_path, sizeof(mon_path));
+    assert(fs_file_exists(mon_path));
+    PASS();
+}
+
 static void test_git_inspection(void) {
     TEST("git_is_repo on flint workspace");
     assert(git_is_repo("."));
@@ -432,6 +493,7 @@ int main(void) {
     test_config_file_parsing();
     test_brief_and_mcp();
     test_git_inspection();
+    test_journal_generation();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);
     return 0;
