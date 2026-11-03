@@ -110,7 +110,6 @@ typedef struct {
     bool write_journal;
     bool weekly_summary;
     bool monthly_summary;
-    bool verbose;
     int mcp_focus_override;             /* -1 = unset, 0 = off, 1 = on */
 } flint_options_t;
 
