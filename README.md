@@ -1,5 +1,7 @@
 # Flint
 
+![Flint](flint_logo.jpeg)
+
 > **Start your workday with clarity.**
 
 **Flint** is a fast, dependency-free command-line tool written in C99 designed to be run at the start of your workday. It integrates with modern AI CLI tools (Google **Antigravity CLI**, Anthropic **Claude Code**, OpenAI **ChatGPT Codex**, and more) across **macOS**, **Linux**, and **Windows**.
