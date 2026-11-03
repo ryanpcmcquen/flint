@@ -185,9 +185,39 @@ Global configuration keys:
 
 MCP focus queries are enabled by default. Disable them globally with `mcp_focus = false`, or per run with `--no-mcp`. Flint only queries when OpenCode reports at least one connected MCP server, and the query is read-only. Any priorities returned by the connected tools are merged into the ranked "Focus for today" list, and connected messaging clients such as Slack or Microsoft Teams are covered automatically through their MCP servers.
 
-Flint reads `~/.config/flint/config` (or `~/.flintrc`). Run `flint --init-config` to create a template.
+### Full Configuration File Format
 
-MCP focus queries are enabled by default. Disable them globally with `mcp_focus = false`, or per run with `--no-mcp`. Flint only queries when OpenCode reports at least one connected MCP server, and the query is read-only. Any priorities returned by the connected tools are merged into the ranked "Focus for today" list, and connected messaging clients such as Slack or Microsoft Teams are covered automatically through their MCP servers.
+The `[tool]` sections of `~/.config/flint/config` (friendly aliases such as `[antigravity]`, `[openai]`, `[open-code]` are accepted):
+
+```ini
+[agy]
+wrapper =
+model = gemini-3.8-flash
+effort = high
+
+[claude]
+wrapper =
+model = claude-3-7-sonnet
+effort = high
+
+[codex]
+wrapper =
+model = o3-mini
+effort = high
+
+[cline]
+wrapper =
+model =
+effort =
+
+[opencode]
+wrapper =
+model =
+effort =
+```
+
+- `wrapper` — launcher binary prepended to the resume command (e.g. `graperoot`); blank means run the raw CLI.
+- `model` / `effort` — model and effort passed to the AI CLI.
 
 ---
 
