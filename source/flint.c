@@ -119,7 +119,6 @@ static void print_usage(const char *prog_name) {
     printf("  -d, --days <N>          Look back N days (default: 1 day / 24 hours)\n");
     printf("      --hours <H>         Look back H hours\n");
     printf("  -w, --workspace <path>  Filter sessions to specific workspace directory\n");
-    printf("      --origin <mode>     Filter by session origin: 'user', 'agent', or 'all'\n");
     printf("  -j, --journal           Record daily standup log to markdown Git repository\n");
     printf("      --weekly            Generate and display weekly standup summary\n");
     printf("      --monthly           Generate and display monthly standup summary\n");

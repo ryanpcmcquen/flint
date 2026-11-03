@@ -91,7 +91,6 @@ Options:
   -d, --days <N>          Look back N days (default: 1 day / 24 hours)
       --hours <H>         Look back H hours
   -w, --workspace <path>  Filter sessions to specific workspace directory
-      --origin <mode>     Filter by session origin: 'user', 'agent', or 'all'
   -j, --journal           Record daily standup log to markdown Git repository
       --weekly            Generate and display weekly standup summary
       --monthly           Generate and display monthly standup summary
