@@ -23,7 +23,7 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
     - ~~`proc_is_session_running()` runs `ps -eo pid,command` once per session, plus an `lsof` per matching process.~~ DONE: ps output is now cached for the process lifetime; `lsof` per matching process remains for workspace checks.
     - ~~`git_inspect_workspace()` spawns 3 `git` subprocesses per session (`rev-parse`, `status`, `log`).~~ DONE: replaced `rev-parse` + `status` with a single `git status --porcelain -b`; only `git log` remains per session.
     - ~~`parse_transcript_line()` in `antigravity.c` mallocs and copies every line.~~ DONE: now reuses a scratch buffer in `agy_scan_ctx_t` instead of malloc/free per line.
-    - `session_list_add()` dedupes with a linear scan. This is fine for small lists.
+    - ~~`proc_is_session_running()` runs `ps -eo pid,command` once per session, plus an `lsof` per matching process.~~ DONE: ps output cached for process lifetime; `lsof` cwd lookups now cached per pid (proc_lsof_cwd). `session_list_add()` dedupes with a linear scan. This is fine for small lists.
   - Profile with a realistic number of sessions before optimizing.
 - [x] **Make the amount of hours to check for active sessions configurable.** DONE.
   - Config key `lookback_hours` (default 24), CLI `--hours <H>` and `-d/--days <N>`. The CLI overrides the config (`flint.c`, `main()`).
