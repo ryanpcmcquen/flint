@@ -93,13 +93,19 @@ void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
         }
         snprintf(out_cmd, out_size, "%sagy%s", prefix, flags);
     } else if (strcmp(tool_cmd, "claude") == 0) {
-        char flags[256] = {0};
+        char flags[512] = {0};
+        if (session_id && session_id[0] != '\0') {
+            snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --resume %s", session_id);
+        }
         if (tc && tc->model[0] != '\0') {
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --model %s", tc->model);
         }
         snprintf(out_cmd, out_size, "%sclaude%s", prefix, flags);
     } else if (strcmp(tool_cmd, "codex") == 0) {
-        char flags[256] = {0};
+        char flags[512] = {0};
+        if (session_id && session_id[0] != '\0') {
+            snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " resume %s", session_id);
+        }
         if (tc && tc->model[0] != '\0') {
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --model %s", tc->model);
         }

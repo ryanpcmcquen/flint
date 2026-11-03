@@ -253,6 +253,26 @@ static void test_config_and_wrappers(void) {
     assert(strstr(cmd6, "--conversation") == NULL);
     config_destroy(&cfg7);
     PASS();
+
+    TEST("config_format_tool_cmd resumes Claude sessions via --resume");
+    flint_config_t cfg8;
+    config_init_defaults(&cfg8);
+    char cmd7[512] = {0};
+    config_format_tool_cmd(&cfg8, "claude", "claude-session-123", cmd7, sizeof(cmd7));
+    assert(strstr(cmd7, "claude --resume claude-session-123") != NULL);
+    assert(strstr(cmd7, "--model claude-3-7-sonnet") != NULL);
+    config_destroy(&cfg8);
+    PASS();
+
+    TEST("config_format_tool_cmd resumes Codex sessions via resume subcommand");
+    flint_config_t cfg9;
+    config_init_defaults(&cfg9);
+    char cmd8[512] = {0};
+    config_format_tool_cmd(&cfg9, "codex", "codex-session-456", cmd8, sizeof(cmd8));
+    assert(strstr(cmd8, "codex resume codex-session-456") != NULL);
+    assert(strstr(cmd8, "--model o3-mini") != NULL);
+    config_destroy(&cfg9);
+    PASS();
 }
 
 static void test_config_file_parsing(void) {
