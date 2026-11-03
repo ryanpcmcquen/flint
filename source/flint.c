@@ -72,6 +72,13 @@ void session_list_free(session_list_t *list) {
     list->capacity = 0;
 }
 
+bool resume_session_should_include(const session_t *s, resume_mode_t mode) {
+    if (!s) return false;
+    if (mode == RESUME_MODE_USER) return s->origin == SESSION_ORIGIN_USER;
+    if (mode == RESUME_MODE_AGENT) return s->origin == SESSION_ORIGIN_AGENT;
+    return true; /* RESUME_MODE_ALL */
+}
+
 #ifndef TEST_MODE
 
 #define BANNER_INNER_WIDTH 62
@@ -413,10 +420,7 @@ int main(int argc, char **argv) {
     session_list_init(&resume_candidates);
     for (size_t i = 0; i < all_sessions.count; i++) {
         const session_t *s = &all_sessions.items[i];
-        if (cfg.resume_mode == RESUME_MODE_USER && s->origin != SESSION_ORIGIN_USER) {
-            continue;
-        }
-        if (cfg.resume_mode == RESUME_MODE_AGENT && s->origin != SESSION_ORIGIN_AGENT) {
+        if (!resume_session_should_include(s, cfg.resume_mode)) {
             continue;
         }
         session_list_add(&resume_candidates, s);

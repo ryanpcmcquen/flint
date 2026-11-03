@@ -408,6 +408,31 @@ static void test_brief_and_mcp(void) {
 }
 
 
+static void test_resume_mode_filter(void) {
+    TEST("resume_mode filter: user sessions only");
+    session_t s;
+    memset(&s, 0, sizeof(s));
+    s.origin = SESSION_ORIGIN_USER;
+    assert(resume_session_should_include(&s, RESUME_MODE_USER) == true);
+    assert(resume_session_should_include(&s, RESUME_MODE_ALL) == true);
+    assert(resume_session_should_include(&s, RESUME_MODE_AGENT) == false);
+    PASS();
+
+    TEST("resume_mode filter: agent sessions");
+    memset(&s, 0, sizeof(s));
+    s.origin = SESSION_ORIGIN_AGENT;
+    assert(resume_session_should_include(&s, RESUME_MODE_AGENT) == true);
+    assert(resume_session_should_include(&s, RESUME_MODE_ALL) == true);
+    assert(resume_session_should_include(&s, RESUME_MODE_USER) == false);
+    PASS();
+
+    TEST("resume_mode filter: all modes");
+    memset(&s, 0, sizeof(s));
+    s.origin = SESSION_ORIGIN_AGENT;
+    assert(resume_session_should_include(&s, RESUME_MODE_ALL) == true);
+    PASS();
+}
+
 static void test_proc_running(void) {
     TEST("proc_is_session_running exact tool matching");
     /* The test binary itself runs as "test_flint"; an exact (non-substring) match
@@ -504,6 +529,7 @@ int main(void) {
     test_git_inspection();
     test_journal_generation();
     test_proc_running();
+    test_resume_mode_filter();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);
     return 0;
