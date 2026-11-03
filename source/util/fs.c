@@ -7,6 +7,7 @@
 #ifdef _WIN32
   #include <windows.h>
   #include <io.h>
+  #include <direct.h>
   #define stat _stat
 #else
   #include <unistd.h>
@@ -51,6 +52,43 @@ bool fs_file_exists(const char *path) {
         return (st.st_mode & S_IFDIR) == 0;
     }
     return false;
+}
+
+int fs_mkdir_p(const char *path) {
+    if (!path || !path[0]) return -1;
+
+    char buf[1024];
+    strncpy(buf, path, sizeof(buf) - 1);
+    buf[sizeof(buf) - 1] = '\0';
+
+#ifdef _WIN32
+    char *copy = (char *)malloc(strlen(buf) + 1);
+    if (!copy) return -1;
+    strcpy(copy, buf);
+    for (char *p = copy + 1; *p; p++) {
+        if (*p == PATH_SEP) {
+            *p = '\0';
+            _mkdir(copy);
+            *p = PATH_SEP;
+        }
+    }
+    _mkdir(buf);
+    free(copy);
+#else
+    char *copy = (char *)malloc(strlen(buf) + 1);
+    if (!copy) return -1;
+    strcpy(copy, buf);
+    for (char *p = copy + 1; *p; p++) {
+        if (*p == PATH_SEP) {
+            *p = '\0';
+            mkdir(copy, 0777);
+            *p = PATH_SEP;
+        }
+    }
+    mkdir(copy, 0777);
+    free(copy);
+#endif
+    return 0;
 }
 
 bool fs_dir_exists(const char *path) {
@@ -182,47 +220,6 @@ void fs_format_time(time_t t, char *out, size_t out_size) {
     }
 
     strftime(out, out_size, "%Y-%m-%d %H:%M", lt);
-}
-
-bool fs_mkdir_p(const char *path) {
-    if (!path) return false;
-
-#ifdef _WIN32
-    /* Windows: use CreateDirectoryA for the full path recursively */
-    char expanded[1024];
-    fs_expand_path(path, expanded, sizeof(expanded));
-
-    /* Find the last separator to create parent directories first */
-    char *last_sep = strrchr(expanded, '\\');
-    if (last_sep != NULL) {
-        *last_sep = '\0';
-        if (last_sep != expanded) {
-            if (!fs_mkdir_p(expanded)) {
-                return false;
-            }
-        }
-        *last_sep = '\\';
-    }
-
-    return CreateDirectoryA(expanded, NULL) != 0 || GetLastError() == ERROR_ALREADY_EXISTS;
-#else
-    /* POSIX: use mkdir with 0755 permissions, creating parents as needed */
-    char expanded[1024];
-    fs_expand_path(path, expanded, sizeof(expanded));
-
-    char *last_sep = strrchr(expanded, '/');
-    if (last_sep != NULL) {
-        *last_sep = '\0';
-        if (last_sep != expanded) {
-            if (!fs_mkdir_p(expanded)) {
-                return false;
-            }
-        }
-        *last_sep = '/';
-    }
-
-    return mkdir(expanded, 0755) == 0 || errno == EEXIST;
-#endif
 }
 
 int fs_list_dir(const char *dir_path, fs_dir_callback_t callback, void *userdata) {

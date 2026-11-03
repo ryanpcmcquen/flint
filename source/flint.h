@@ -88,6 +88,7 @@ typedef struct {
     int lookback_hours;
     bool open_in_tabs;
     bool auto_journal;
+    bool mcp_focus;                     /* Query connected MCP tools for today's focus */
 
     /* Ordered list of tool configurations. Each AI CLI adapter owns one
      * entry; anything not listed gets no wrapper by default. */
@@ -110,6 +111,7 @@ typedef struct {
     bool weekly_summary;
     bool monthly_summary;
     bool verbose;
+    int mcp_focus_override;             /* -1 = unset, 0 = off, 1 = on */
 } flint_options_t;
 
 /* Session list management functions */

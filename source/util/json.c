@@ -105,6 +105,20 @@ bool json_get_int(const char *json, const char *key, long *out) {
     return (endptr != val);
 }
 
+bool json_get_long_long(const char *json, const char *key, long long *out) {
+    if (!json || !key || !out) return false;
+
+    const char *val = find_key(json, key);
+    if (!val) return false;
+
+    while (*val && isspace((unsigned char)*val)) val++;
+    if (!isdigit((unsigned char)*val) && *val != '-') return false;
+
+    char *endptr = NULL;
+    *out = strtoll(val, &endptr, 10);
+    return (endptr != val);
+}
+
 bool json_get_bool(const char *json, const char *key, bool *out) {
     if (!json || !key || !out) return false;
 
@@ -164,6 +178,47 @@ bool json_get_block(const char *json, const char *key, char *out, size_t out_siz
     strncpy(out, start, len);
     out[len] = '\0';
     return true;
+}
+
+const char *json_next_object(const char *json, const char **end_out) {
+    if (end_out) *end_out = NULL;
+    if (!json) return NULL;
+
+    const char *p = json;
+    while (*p && *p != '{') p++;
+    if (!*p) return NULL;
+
+    const char *start = p;
+    int depth = 0;
+    bool in_string = false;
+    bool escaped = false;
+
+    for (; *p; p++) {
+        char c = *p;
+        if (in_string) {
+            if (escaped) {
+                escaped = false;
+            } else if (c == '\\') {
+                escaped = true;
+            } else if (c == '"') {
+                in_string = false;
+            }
+        } else {
+            if (c == '"') {
+                in_string = true;
+            } else if (c == '{') {
+                depth++;
+            } else if (c == '}') {
+                depth--;
+                if (depth == 0) {
+                    if (end_out) *end_out = p + 1;
+                    return start;
+                }
+            }
+        }
+    }
+
+    return NULL;
 }
 
 int jsonl_for_each_line(const char *content, jsonl_line_cb_t callback, void *userdata) {

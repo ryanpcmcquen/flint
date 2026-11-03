@@ -5,8 +5,8 @@
 
 static void ensure_dir(const char *dir) {
     if (!fs_dir_exists(dir)) {
-        if (!fs_mkdir_p(dir)) {
-            fprintf(stderr, "Error: Failed to create directory: %s\\n", dir);
+        if (fs_mkdir_p(dir) != 0) {
+            fprintf(stderr, "Error: Failed to create directory: %s\n", dir);
         }
     }
 }

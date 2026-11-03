@@ -1,77 +1,101 @@
 #include "ai_adapter.h"
-#include "../git/git.h"
-#include "../process/proc.h"
 #include "../util/fs.h"
 #include "../util/json.h"
-#include <stdlib.h>
+#include "../util/exec.h"
+#include "../config/config.h"
+#include "../git/git.h"
+#include "../process/proc.h"
 #include <string.h>
 
-/* OpenCode stores session data in a local SQLite database. The official way to
- * enumerate sessions is `opencode session list --format json`, which queries
- * that database on the background server; we shell out to `sqlite3` to do the
- * same from the C engine. */
+static int opencode_discover(const flint_config_t *cfg, int lookback_hours, session_list_t *list) {
+    char *output = exec_capture("opencode api session.list --param limit=100");
+    if (!output) return 0;
 
-static bool opencode_is_available(void) {
-    char db[MAX_PATH_LEN];
-    fs_expand_path("~/.local/share/opencode/opencode.db", db, sizeof(db));
-    return fs_file_exists(db);
-}
+    time_t cutoff = time(NULL) - (lookback_hours * 3600);
+    const char *p = output;
 
-static int opencode_discover(const flint_config_t *cfg, int lookback_hours,
-                             session_list_t *list) {
-    char db[MAX_PATH_LEN];
-    fs_expand_path("~/.local/share/opencode/opencode.db", db, sizeof(db));
+    while (true) {
+        const char *end = NULL;
+        const char *object = json_next_object(p, &end);
+        if (!object) break;
+        p = end;
 
-    time_t now = time(NULL);
-    long long cutoff = (long long)(now - (lookback_hours * 3600));
+        size_t len = (size_t)(end - object);
+        char *json = (char *)malloc(len + 1);
+        if (!json) break;
 
-    char sql[MAX_CMD_LEN];
-    snprintf(sql, sizeof(sql),
-             "select json_object('id', id, 'title', title, 'directory', directory, "
-             "'time_updated', time_updated, 'model', model, 'agent', agent) "
-             "from session_v2 where time_updated >= %lld order by time_updated desc",
-             cutoff);
+        memcpy(json, object, len);
+        json[len] = '\0';
 
-    char cmd[MAX_CMD_LEN * 2];
-    snprintf(cmd, sizeof(cmd), "sqlite3 \"%s\" \"%s\"", db, sql);
+        char id[MAX_NAME_LEN] = {0};
+        if (json_get_string(json, "id", id, sizeof(id))) {
+            char title[MAX_SUMMARY_LEN] = {0};
+            char directory[MAX_PATH_LEN] = {0};
+            char parent_id[MAX_NAME_LEN] = {0};
+            long long updated_ms = 0;
 
-    FILE *pipe = popen(cmd, "r");
-    if (!pipe) return 0;
+            json_get_string(json, "title", title, sizeof(title));
+            json_get_string(json, "directory", directory, sizeof(directory));
+            json_get_string(json, "parentID", parent_id, sizeof(parent_id));
 
-    char line[MAX_CMD_LEN];
-    while (fgets(line, sizeof(line), pipe)) {
-        size_t len = strlen(line);
-        while (len > 0 && (line[len - 1] == '\n' || line[len - 1] == '\r')) line[--len] = '\0';
-        if (len == 0) continue;
+            if (json_get_long_long(json, "updated", &updated_ms)) {
+                time_t updated = (time_t)(updated_ms / 1000);
+                if (updated >= cutoff) {
+                    session_t session;
+                    memset(&session, 0, sizeof(session));
 
-        session_t session;
-        memset(&session, 0, sizeof(session));
-        strncpy(session.id, "", sizeof(session.id) - 1);
-        session.tool_name[0] = '\0';
-        strncpy(session.tool_cmd, "opencode", sizeof(session.tool_cmd) - 1);
-        session.origin = SESSION_ORIGIN_USER;
+                    strncpy(session.id, id, sizeof(session.id) - 1);
+                    strncpy(session.tool_name, "OpenCode", sizeof(session.tool_name) - 1);
+                    strncpy(session.tool_cmd, "opencode", sizeof(session.tool_cmd) - 1);
+                    session.origin = parent_id[0] != '\0' ?
+                                     SESSION_ORIGIN_AGENT : SESSION_ORIGIN_USER;
 
-        json_get_string(line, "id", session.id, sizeof(session.id));
-        json_get_string(line, "title", session.summary, sizeof(session.summary));
-        json_get_string(line, "directory", session.workspace, sizeof(session.workspace));
-        json_get_int(line, "time_updated", (long *)&session.last_active);
+                    if (directory[0] != '\0') {
+                        strncpy(session.workspace, directory, sizeof(session.workspace) - 1);
+                    } else {
+                        fs_expand_path("~", session.workspace, sizeof(session.workspace));
+                    }
 
-        if (session.summary[0] == '\0') strncpy(session.summary, "OpenCode session", sizeof(session.summary) - 1);
-        if (session.workspace[0] == '\0') strncpy(session.workspace, ".", sizeof(session.workspace) - 1);
+                    if (title[0] != '\0') {
+                        str_truncate_clean(session.summary, title, sizeof(session.summary) - 1);
+                    } else {
+                        snprintf(session.summary, sizeof(session.summary), "Recent OpenCode session");
+                    }
 
-        fs_format_time(session.last_active, session.last_active_str, sizeof(session.last_active_str));
+                    session.last_active = updated;
+                    fs_format_time(updated, session.last_active_str, sizeof(session.last_active_str));
+                    session.was_merely_open = false;
 
-        snprintf(session.resume_cmd, sizeof(session.resume_cmd), "opencode --session %s", session.id);
+                    config_format_tool_cmd(cfg, "opencode", session.id,
+                                           session.resume_cmd, sizeof(session.resume_cmd));
 
-        /* Git context for the workspace. */
-        git_inspect_workspace(session.workspace, cfg ? cfg->lookback_hours : 24, &session.git);
-        session.is_already_running = proc_is_session_running("opencode", session.workspace);
+                    git_inspect_workspace(session.workspace, lookback_hours, &session.git);
+                    session.is_already_running = proc_is_session_running("opencode", session.workspace);
 
-        session_list_add(list, &session);
+                    session_list_add(list, &session);
+                }
+            }
+        }
+
+        free(json);
     }
 
-    pclose(pipe);
+    free(output);
     return 0;
+}
+
+static bool opencode_is_available(void) {
+    char db_path[MAX_PATH_LEN];
+    fs_expand_path("~/.local/share/opencode/opencode.db", db_path, sizeof(db_path));
+    if (fs_file_exists(db_path)) {
+        return true;
+    }
+
+#ifdef _WIN32
+    return system("where opencode >nul 2>&1") == 0;
+#else
+    return system("command -v opencode >/dev/null 2>&1") == 0;
+#endif
 }
 
 const ai_adapter_t opencode_adapter = {
