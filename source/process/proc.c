@@ -45,6 +45,12 @@ static void proc_exe_basename(const char *cmdline, char *out, size_t out_size) {
 static char proc_ps_cache[PROC_PS_CACHE_MAX_LINES][1024];
 static int proc_ps_cache_count = 0;
 
+/* Cached `lsof -a -d cwd -p <pid>` results, keyed by pid. */
+#define PROC_LSOF_CACHE_MAX 64
+static int proc_lsof_pids[PROC_LSOF_CACHE_MAX];
+static char proc_lsof_cwds[PROC_LSOF_CACHE_MAX][MAX_PATH_LEN];
+static int proc_lsof_count = 0;
+
 static void proc_load_ps_cache(void) {
     if (proc_ps_cache_count > 0) return;
 
@@ -65,6 +71,41 @@ static void proc_load_ps_cache(void) {
     pclose(pipe);
 }
 
+/* Resolve a process's current working directory via lsof, with caching. */
+static const char *proc_lsof_cwd(int pid) {
+    for (int i = 0; i < proc_lsof_count; i++) {
+        if (proc_lsof_pids[i] == pid) {
+            return proc_lsof_cwds[i][0] != '\0' ? proc_lsof_cwds[i] : NULL;
+        }
+    }
+
+    char lsof_cmd[256];
+    snprintf(lsof_cmd, sizeof(lsof_cmd), "lsof -a -d cwd -p %d -Fn 2>/dev/null", pid);
+    const char *cwd = NULL;
+    FILE *lpipe = popen(lsof_cmd, "r");
+    if (lpipe) {
+        char lline[MAX_PATH_LEN];
+        char buf[MAX_PATH_LEN] = {0};
+        while (fgets(lline, sizeof(lline), lpipe)) {
+            if (lline[0] == 'n') {
+                char *path = lline + 1;
+                str_trim(path);
+                snprintf(buf, sizeof(buf), "%s", path);
+                cwd = buf;
+                break;
+            }
+        }
+        pclose(lpipe);
+    }
+
+    if (proc_lsof_count < PROC_LSOF_CACHE_MAX) {
+        proc_lsof_pids[proc_lsof_count] = pid;
+        snprintf(proc_lsof_cwds[proc_lsof_count], MAX_PATH_LEN, "%s", cwd ? cwd : "");
+        proc_lsof_count++;
+    }
+    return cwd;
+}
+
 /* Check a single cached ps line for a running process with the given
    executable basename (exact, case-insensitive) in the given workspace. */
 static bool proc_line_matches(const char *line, const char *tool_cmd, const char *workspace_path) {
@@ -80,25 +121,10 @@ static bool proc_line_matches(const char *line, const char *tool_cmd, const char
     if (workspace_path && workspace_path[0] != '\0') {
         if (strstr(prog, workspace_path) != NULL) return true;
 
-        /* Alternatively check cwd of process via lsof */
-        char lsof_cmd[256];
-        snprintf(lsof_cmd, sizeof(lsof_cmd), "lsof -a -d cwd -p %d -Fn 2>/dev/null", pid);
-        FILE *lpipe = popen(lsof_cmd, "r");
-        if (lpipe) {
-            char lline[MAX_PATH_LEN];
-            bool found = false;
-            while (fgets(lline, sizeof(lline), lpipe)) {
-                if (lline[0] == 'n') {
-                    char *path = lline + 1;
-                    str_trim(path);
-                    if (strcmp(path, workspace_path) == 0) {
-                        found = true;
-                        break;
-                    }
-                }
-            }
-            pclose(lpipe);
-            if (found) return true;
+        /* Alternatively check cwd of process via cached lsof lookup */
+        const char *cwd = proc_lsof_cwd(pid);
+        if (cwd && strcmp(cwd, workspace_path) == 0) {
+            return true;
         }
     }
     return false;
