@@ -79,31 +79,38 @@ static const char *proc_lsof_cwd(int pid) {
         }
     }
 
+    char cwd_buf[MAX_PATH_LEN] = {0};
     char lsof_cmd[256];
     snprintf(lsof_cmd, sizeof(lsof_cmd), "lsof -a -d cwd -p %d -Fn 2>/dev/null", pid);
-    const char *cwd = NULL;
     FILE *lpipe = popen(lsof_cmd, "r");
     if (lpipe) {
         char lline[MAX_PATH_LEN];
-        char buf[MAX_PATH_LEN] = {0};
         while (fgets(lline, sizeof(lline), lpipe)) {
             if (lline[0] == 'n') {
                 char *path = lline + 1;
                 str_trim(path);
-                snprintf(buf, sizeof(buf), "%s", path);
-                cwd = buf;
+                snprintf(cwd_buf, sizeof(cwd_buf), "%s", path);
                 break;
             }
         }
         pclose(lpipe);
     }
 
+    /* Cache the resolved cwd, evicting the oldest slot when the cache is full. */
+    int slot;
     if (proc_lsof_count < PROC_LSOF_CACHE_MAX) {
-        proc_lsof_pids[proc_lsof_count] = pid;
-        snprintf(proc_lsof_cwds[proc_lsof_count], MAX_PATH_LEN, "%s", cwd ? cwd : "");
-        proc_lsof_count++;
+        slot = proc_lsof_count++;
+    } else {
+        slot = 0;
+        for (int i = 1; i < PROC_LSOF_CACHE_MAX; i++) {
+            if (proc_lsof_pids[i] == pid) { slot = i; break; }
+        }
     }
-    return cwd;
+    proc_lsof_pids[slot] = pid;
+    snprintf(proc_lsof_cwds[slot], MAX_PATH_LEN, "%s", cwd_buf);
+
+    if (cwd_buf[0] == '\0') return NULL;
+    return proc_lsof_cwds[slot];
 }
 
 /* Check a single cached ps line for a running process with the given
