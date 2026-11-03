@@ -14,11 +14,18 @@ bool json_get_string(const char *json, const char *key, char *out, size_t out_si
 /* Find integer value for key in JSON object: "key": 123 */
 bool json_get_int(const char *json, const char *key, long *out);
 
+/* Find a 64-bit integer value for key in JSON object: "key": 123 */
+bool json_get_long_long(const char *json, const char *key, long long *out);
+
 /* Find boolean value for key: "key": true / false */
 bool json_get_bool(const char *json, const char *key, bool *out);
 
 /* Extract an inner JSON block (object {} or array []) */
 bool json_get_block(const char *json, const char *key, char *out, size_t out_size);
+
+/* Find the next top-level {...} object in a JSON buffer. Returns a pointer to
+ * the opening brace and writes one past the closing brace to *end_out. */
+const char *json_next_object(const char *json, const char **end_out);
 
 /* Callback for processing each line in a JSONL buffer */
 typedef int (*jsonl_line_cb_t)(const char *line, size_t len, size_t line_number, void *userdata);

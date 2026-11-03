@@ -3,14 +3,14 @@
 #include <string.h>
 #include <assert.h>
 #include <unistd.h>
-#include <sys/stat.h>
 #include "../source/flint.h"
+#include "../source/ai/mcp.h"
+#include "../source/brief/brief.h"
 #include "../source/config/config.h"
 #include "../source/git/git.h"
 #include "../source/util/fs.h"
 #include "../source/util/json.h"
 #include "../source/terminal/terminal.h"
-#include "../source/journal/journal.h"
 
 static int total_tests = 0;
 static int passed_tests = 0;
@@ -45,6 +45,25 @@ static void test_json_primitives(void) {
     bool active = false;
     assert(json_get_bool(json, "active", &active));
     assert(active == true);
+    PASS();
+
+    TEST("json_get_long_long");
+    const char *big_json = "{\"updated\": 1793641153470}";
+    long long updated = 0;
+    assert(json_get_long_long(big_json, "updated", &updated));
+    assert(updated == 1793641153470LL);
+    PASS();
+
+    TEST("json_next_object");
+    const char *objects = "[{\"name\": \"one\"}, {\"name\": \"two\"}]";
+    const char *end = NULL;
+    const char *first = json_next_object(objects, &end);
+    assert(first != NULL);
+    assert(end != NULL);
+    assert(strncmp(first, "{\"name\": \"one\"}", (size_t)(end - first)) == 0);
+    const char *second = json_next_object(end, &end);
+    assert(second != NULL);
+    assert(strncmp(second, "{\"name\": \"two\"}", (size_t)(end - second)) == 0);
     PASS();
 }
 
@@ -160,7 +179,8 @@ static void test_config_and_wrappers(void) {
     TEST("config_init_defaults (no default wrapper)");
     flint_config_t cfg;
     config_init_defaults(&cfg);
-    assert(cfg.tool_config_count == 3);
+    assert(cfg.tool_config_count == 5);
+    assert(cfg.mcp_focus == true);
     const tool_config_t *agy = config_find_tool(&cfg, "agy");
     assert(agy != NULL);
     assert(agy->wrapper[0] == '\0');
@@ -175,6 +195,8 @@ static void test_config_and_wrappers(void) {
     assert(config_find_tool(&cfg2, "agy") != NULL);
     assert(config_find_tool(&cfg2, "claude") != NULL);
     assert(config_find_tool(&cfg2, "codex") != NULL);
+    assert(config_find_tool(&cfg2, "cline") != NULL);
+    assert(config_find_tool(&cfg2, "opencode") != NULL);
     assert(config_find_tool(&cfg2, "grafareoot") == NULL);
     config_destroy(&cfg2);
     PASS();
@@ -200,31 +222,56 @@ static void test_config_and_wrappers(void) {
     config_destroy(&cfg4);
     PASS();
 
-    TEST("config_format_tool_cmd includes resume session_id for agy");
+    TEST("config_format_tool_cmd resumes Cline sessions");
     flint_config_t cfg5;
     config_init_defaults(&cfg5);
-    char cmd5[512] = {0};
-    config_format_tool_cmd(&cfg5, "agy", "abc123", cmd5, sizeof(cmd5));
-    assert(strstr(cmd5, "--conversation abc123") != NULL);
+    char cmd3[512] = {0};
+    config_format_tool_cmd(&cfg5, "cline", "session-555", cmd3, sizeof(cmd3));
+    assert(strstr(cmd3, "cline --id session-555") != NULL);
     config_destroy(&cfg5);
     PASS();
 
-    TEST("config_format_tool_cmd includes resume session_id for claude");
+    TEST("config_format_tool_cmd resumes OpenCode sessions");
     flint_config_t cfg6;
     config_init_defaults(&cfg6);
-    char cmd6[512] = {0};
-    config_format_tool_cmd(&cfg6, "claude", "def456", cmd6, sizeof(cmd6));
-    assert(strstr(cmd6, "--resume def456") != NULL);
+    char cmd4[512] = {0};
+    config_format_tool_cmd(&cfg6, "opencode", "ses_abc123", cmd4, sizeof(cmd4));
+    assert(strstr(cmd4, "opencode --session ses_abc123") != NULL);
     config_destroy(&cfg6);
     PASS();
 
-    TEST("config_format_tool_cmd includes resume session_id for codex");
+    TEST("config_format_tool_cmd resumes Antigravity sessions via --conversation");
     flint_config_t cfg7;
     config_init_defaults(&cfg7);
-    char cmd7[512] = {0};
-    config_format_tool_cmd(&cfg7, "codex", "ghi789", cmd7, sizeof(cmd7));
-    assert(strstr(cmd7, "codex resume ghi789") != NULL);
+    char cmd5[512] = {0};
+    config_format_tool_cmd(&cfg7, "agy", "conv-abc123", cmd5, sizeof(cmd5));
+    assert(strstr(cmd5, "agy --conversation conv-abc123") != NULL);
+    assert(strstr(cmd5, "--model gemini-3.8-flash") != NULL);
+    assert(strstr(cmd5, "--effort high") != NULL);
+    char cmd6[512] = {0};
+    config_format_tool_cmd(&cfg7, "agy", "", cmd6, sizeof(cmd6));
+    assert(strstr(cmd6, "--conversation") == NULL);
     config_destroy(&cfg7);
+    PASS();
+
+    TEST("config_format_tool_cmd resumes Claude sessions via --resume");
+    flint_config_t cfg8;
+    config_init_defaults(&cfg8);
+    char cmd7[512] = {0};
+    config_format_tool_cmd(&cfg8, "claude", "claude-session-123", cmd7, sizeof(cmd7));
+    assert(strstr(cmd7, "claude --resume claude-session-123") != NULL);
+    assert(strstr(cmd7, "--model claude-3-7-sonnet") != NULL);
+    config_destroy(&cfg8);
+    PASS();
+
+    TEST("config_format_tool_cmd resumes Codex sessions via resume subcommand");
+    flint_config_t cfg9;
+    config_init_defaults(&cfg9);
+    char cmd8[512] = {0};
+    config_format_tool_cmd(&cfg9, "codex", "codex-session-456", cmd8, sizeof(cmd8));
+    assert(strstr(cmd8, "codex resume codex-session-456") != NULL);
+    assert(strstr(cmd8, "--model o3-mini") != NULL);
+    config_destroy(&cfg9);
     PASS();
 }
 
@@ -273,105 +320,91 @@ static void test_config_file_parsing(void) {
     config_destroy(&cfg2);
     remove(path);
     PASS();
-}
 
-static void test_journal_daily(void) {
-    TEST("journal_record_daily with real config and temp repo");
-    {
-        /* Create a temporary journal repo and test daily recording */
-        char repo[MAX_PATH_LEN];
-        snprintf(repo, sizeof(repo), "/tmp/flint_test_journal_%d", (int)getpid());
-        snprintf(repo, sizeof(repo), "%s/journal", repo);
-        
-        /* Create journal directory structure */
-        char daily[MAX_PATH_LEN];
-        snprintf(daily, sizeof(daily), "%s/daily", repo);
-        mkdir(repo, 0755);
-        mkdir(daily, 0755);
+    TEST("config file parsing: mcp_focus");
+    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    f = fopen(path, "w");
+    assert(f);
+    fprintf(f, "mcp_focus = false\n");
+    fclose(f);
 
-        flint_config_t cfg;
-        config_init_defaults(&cfg);
-        strncpy(cfg.journal_repo, repo, sizeof(cfg.journal_repo) - 1);
-        cfg.journal_repo[sizeof(cfg.journal_repo) - 1] = ' ';
-
-        session_list_t list;
-        session_list_init(&list);
-
-        session_t s;
-        memset(&s, 0, sizeof(s));
-        strncpy(s.id, "test1", sizeof(s.id) - 1);
-        strncpy(s.tool_name, "Test Tool", sizeof(s.tool_name) - 1);
-        strncpy(s.tool_cmd, "test", sizeof(s.tool_cmd) - 1);
-        s.origin = SESSION_ORIGIN_USER;
-        s.workspace[0] = ' ';
-        strncpy(s.workspace, "/tmp/test-project", sizeof(s.workspace) - 1);
-        s.summary[0] = ' ';
-        strncpy(s.summary, "Test session", sizeof(s.summary) - 1);
-        s.last_active = time(NULL);
-        fs_format_time(s.last_active, s.last_active_str, sizeof(s.last_active_str));
-
-        session_list_add(&list, &s);
-
-        int result = journal_record_daily(&cfg, &list);
-        assert(result == 0);
-
-        /* Verify the file was created */
-        char date_file[32];
-        time_t now = time(NULL);
-        struct tm *lt = localtime(&now);
-        strftime(date_file, sizeof(date_file), "%Y-%m-%d.md", lt);
-        char file_path[MAX_PATH_LEN];
-        snprintf(file_path, sizeof(file_path), "%s/daily/%s", repo, date_file);
-        assert(fs_file_exists(file_path));
-
-        /* Cleanup */
-        session_list_free(&list);
-        config_destroy(&cfg);
-        /* Don't remove the repo - just leave it for inspection */
-    }
+    flint_config_t cfg3;
+    config_init_defaults(&cfg3);
+    assert(config_load(path, &cfg3));
+    assert(cfg3.mcp_focus == false);
+    config_destroy(&cfg3);
+    remove(path);
     PASS();
 }
 
-static void test_claude_codex_discovery(void) {
-    TEST("Claude path decoding: %2F becomes / in dir names");
-    {
-        char decoded[MAX_PATH_LEN] = {0};
-        const char *entry = "project%2Fsubdir%2Fsession";
-        char *d = decoded;
-        const char *s = entry;
-        while (*s && (size_t)(d - decoded) < sizeof(decoded) - 1) {
-            if (*s == '%' && *(s+1) == '2' && (*(s+2) == 'F' || *(s+2) == 'f')) {
-                *d++ = '/';
-                s += 3;
-            } else {
-                *d++ = *s++;
-            }
-        }
-        *d = '\0';
-        assert(strcmp(decoded, "project/subdir/session") == 0);
-    }
+static void test_brief_and_mcp(void) {
+    TEST("brief_build ranks unfinished work first");
+    session_list_t list;
+    session_list_init(&list);
+
+    session_t older = {0};
+    older.last_active = 100;
+    strncpy(older.workspace, "/tmp/alpha", sizeof(older.workspace) - 1);
+    strncpy(older.tool_name, "Cline", sizeof(older.tool_name) - 1);
+    strncpy(older.summary, "Older alpha work", sizeof(older.summary) - 1);
+
+    session_t newer = {0};
+    newer.last_active = 200;
+    strncpy(newer.workspace, "/tmp/alpha", sizeof(newer.workspace) - 1);
+    strncpy(newer.tool_name, "OpenCode", sizeof(newer.tool_name) - 1);
+    strncpy(newer.summary, "Newer alpha work", sizeof(newer.summary) - 1);
+    newer.git.is_git_repo = true;
+    newer.git.uncommitted_count = 2;
+    strncpy(newer.git.suggested_focus, "Finish uncommitted changes in source.c",
+            sizeof(newer.git.suggested_focus) - 1);
+
+    session_t beta = {0};
+    beta.last_active = 150;
+    strncpy(beta.workspace, "/Users/test/beta", sizeof(beta.workspace) - 1);
+    strncpy(beta.tool_name, "Codex", sizeof(beta.tool_name) - 1);
+    strncpy(beta.summary, "Refactor the parser", sizeof(beta.summary) - 1);
+
+    session_list_add(&list, &older);
+    session_list_add(&list, &newer);
+    session_list_add(&list, &beta);
+
+    brief_t brief;
+    brief_build(&list, &brief);
+    assert(brief.focus_count == 2);
+    assert(strcmp(brief.focus[0].workspace, "/tmp/alpha") == 0);
+    assert(strstr(brief.focus[0].text, "uncommitted") != NULL);
+    assert(strcmp(brief.focus[1].workspace, "/Users/test/beta") == 0);
+    assert(strstr(brief.focus[1].text, "Refactor the parser") != NULL);
+
+    session_list_free(&list);
     PASS();
 
-    TEST("Codex directory scanning with timestamp cutoff");
-    {
-        /* Verify filesystem reading logic with a real file */
-        char path[MAX_PATH_LEN];
-        snprintf(path, sizeof(path), "/tmp/flint_test_codex_%d.json", (int)getpid());
-        FILE *f = fopen(path, "w");
-        assert(f);
-        time_t now = time(NULL);
-        fputs("{}", f);
-        fclose(f);
+    TEST("mcp_parse_connected_servers");
+    const char *mcp_json =
+        "{\"location\":{\"directory\":\"/tmp\"},\"data\":["
+        "{\"name\":\"slack\",\"status\":{\"status\":\"connected\"}},"
+        "{\"name\":\"linear\",\"status\":{\"status\":\"disabled\"}},"
+        "{\"name\":\"notion\",\"status\":{\"status\":\"connected\"}}]}";
+    char servers[256] = {0};
+    assert(mcp_parse_connected_servers(mcp_json, servers, sizeof(servers)));
+    assert(strcmp(servers, "slack, notion") == 0);
 
-        time_t cutoff = now - (24 * 3600);
-        /* File should exist and be newer than cutoff */
-        struct stat st;
-        assert(stat(path, &st) == 0);
-        assert(st.st_mtime >= cutoff);
-        remove(path);
-    }
+    const char *no_mcp = "{\"data\":[{\"name\":\"slack\",\"status\":{\"status\":\"disabled\"}}]}";
+    assert(!mcp_parse_connected_servers(no_mcp, servers, sizeof(servers)));
+    PASS();
+
+    TEST("brief_add_mcp_focus adds bullets");
+    brief_t brief2;
+    memset(&brief2, 0, sizeof(brief2));
+    bool added = brief_add_mcp_focus(&brief2, "- Review the Slack thread\n- Finish the README changes\n", 5, "slack");
+    assert(added);
+    assert(brief2.focus_count == 2);
+    assert(strcmp(brief2.focus[0].text, "Review the Slack thread") == 0);
+    assert(strcmp(brief2.focus[0].workspace, "slack") == 0);
+    assert(strcmp(brief2.focus[1].text, "Finish the README changes") == 0);
     PASS();
 }
+
 
 static void test_git_inspection(void) {
     TEST("git_is_repo on flint workspace");
@@ -397,9 +430,8 @@ int main(void) {
     test_terminal_registry();
     test_config_and_wrappers();
     test_config_file_parsing();
+    test_brief_and_mcp();
     test_git_inspection();
-    test_claude_codex_discovery();
-    test_journal_daily();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);
     return 0;

@@ -54,18 +54,11 @@ int git_inspect_workspace(const char *workspace_path, int lookback_hours, git_in
     }
     out_info->is_git_repo = true;
 
-    /* 1. Get current branch */
-    char branch_out[128] = {0};
-    if (run_git_cmd(workspace_path, "rev-parse --abbrev-ref HEAD", branch_out, sizeof(branch_out)) == 0) {
-        str_trim(branch_out);
-        strncpy(out_info->branch, branch_out, sizeof(out_info->branch) - 1);
-    } else {
-        strncpy(out_info->branch, "HEAD", sizeof(out_info->branch) - 1);
-    }
-
-    /* 2. Get uncommitted status */
+    /* 1. Get branch + uncommitted status in a single git call:
+          git status --porcelain -b (branch header + change list) */
     char status_out[2048] = {0};
-    if (run_git_cmd(workspace_path, "status --porcelain", status_out, sizeof(status_out)) == 0) {
+    if (run_git_cmd(workspace_path, "status --porcelain -b", status_out, sizeof(status_out)) == 0) {
+        str_trim(status_out);
         int modified = 0;
         int untracked = 0;
         int staged = 0;
@@ -76,8 +69,41 @@ int git_inspect_workspace(const char *workspace_path, int lookback_hours, git_in
         while (*p) {
             const char *line_start = p;
             while (*p && *p != '\n' && *p != '\r') p++;
+            size_t llen = (size_t)(p - line_start);
 
-            if (p - line_start >= 3) {
+            if (llen > 0 && line_start[0] == '#') {
+                /* Branch header, e.g. "## main...origin/main" or "## No commits yet on main" */
+                char header[256];
+                if (llen < sizeof(header)) {
+                    strncpy(header, line_start, llen);
+                    header[llen] = '\0';
+                    const char *hb = strstr(header, "## ");
+                    if (hb) {
+                        const char *b = hb + 3;
+                        const char *end = b;
+                        while (*end && *end != '\n' && *end != '\r') end++;
+                        size_t blen = (size_t)(end - b);
+                        if (blen < sizeof(out_info->branch)) {
+                            char branch_buf[128];
+                            strncpy(branch_buf, b, blen);
+                            branch_buf[blen] = '\0';
+                            char *dotdot = strstr(branch_buf, "...");
+                            if (dotdot) *dotdot = '\0';
+                            char *no_br = strstr(branch_buf, " (no branch)");
+                            if (no_br) *no_br = '\0';
+                            const char *np = "No commits yet on ";
+                            size_t nplen = strlen(np);
+                            if (strncmp(branch_buf, np, nplen) == 0) {
+                                str_trim(branch_buf + nplen);
+                            }
+                            str_trim(branch_buf);
+                            strncpy(out_info->branch, branch_buf, sizeof(out_info->branch) - 1);
+                            out_info->branch[sizeof(out_info->branch) - 1] = '\0';
+                        }
+                    }
+                }
+            } else if (llen >= 3) {
+                /* Uncommitted change line, e.g. " M file", "M  file", "?? file" */
                 char x = line_start[0];
                 char y = line_start[1];
                 if (x == '?' && y == '?') {
@@ -113,9 +139,17 @@ int git_inspect_workspace(const char *workspace_path, int lookback_hours, git_in
         } else {
             snprintf(out_info->uncommitted_summary, sizeof(out_info->uncommitted_summary), "Clean working tree");
         }
+
+        if (out_info->branch[0] == '\0') {
+            strncpy(out_info->branch, "HEAD", sizeof(out_info->branch) - 1);
+            out_info->branch[sizeof(out_info->branch) - 1] = '\0';
+        }
+    } else {
+        strncpy(out_info->branch, "HEAD", sizeof(out_info->branch) - 1);
+        out_info->branch[sizeof(out_info->branch) - 1] = '\0';
     }
 
-    /* 3. Get recent commits */
+    /* 2. Get recent commits */
     char log_args[128];
     snprintf(log_args, sizeof(log_args), "log --since=\"%d hours ago\" --oneline -n 5", lookback_hours);
 
@@ -124,6 +158,7 @@ int git_inspect_workspace(const char *workspace_path, int lookback_hours, git_in
         str_trim(log_out);
         if (log_out[0] != '\0') {
             strncpy(out_info->recent_commits, log_out, sizeof(out_info->recent_commits) - 1);
+            out_info->recent_commits[sizeof(out_info->recent_commits) - 1] = '\0';
             int count = 0;
             const char *lp = log_out;
             while (*lp) {
