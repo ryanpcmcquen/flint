@@ -52,9 +52,17 @@ static int parse_transcript_line(const char *line, size_t len, size_t line_num, 
                     ctx->prompt_count++;
                 }
 
-                /* Extract workspace if present in Active Workspaces */
+                /* Extract workspace if present in Active Workspaces or Command Working Directory.
+                 * Antigravity CLI may record either tag depending on the transcript format. */
                 const char *ws_tag = "Active Workspaces:";
+                const char *cwd_tag = "Command Working Directory:";
                 const char *ws_found = strstr(content, ws_tag);
+                if (!ws_found) {
+                    ws_found = strstr(content, cwd_tag);
+                    if (ws_found) {
+                        ws_tag = cwd_tag;
+                    }
+                }
                 if (ws_found) {
                     const char *line_start = ws_found + strlen(ws_tag);
                     while (*line_start && (*line_start == ' ' || *line_start == '\n' || *line_start == '\r' || *line_start == '-')) {
