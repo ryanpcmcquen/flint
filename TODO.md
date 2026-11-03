@@ -40,6 +40,12 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
 - [x] Antigravity falls back to `~` as the workspace when it can't find one. Fixed: when the transcript has no workspace, the session now falls back to the current working directory instead of the user's home directory. The `Active Workspaces:` / `Command Working Directory:` tag extraction itself still needs a real transcript to verify.
 - [ ] Claude and Codex discovery looks like placeholder logic. Claude decodes `%2F` in directory names, and Codex treats top-level `~/.codex` entries as sessions with workspace `~`. I couldn't verify either against real data, since neither tool's data directory exists here. Check against real installs.
 - [x] `proc_is_session_running()` matches `strstr(prog, tool_cmd)`, so a short name like `agy` can match unrelated command lines. Fixed: POSIX branch now extracts the executable basename from the first command token (after any path) and compares it to the tool name case-insensitively; workspace fallback (lsof cwd check) unchanged. Windows branch already compared exact exe names (`tool_cmd` vs `tool_cmd.exe`) and ignores the workspace — left as a known limitation.
-- [ ] Audit the codebase for remnants / cleanup after AI model & CLI switching experiments (stale flags, dead code, half-finished wiring, duplicated logic).
+- [x] Audit the codebase for remnants / cleanup after AI model & CLI switching experiments (stale flags, dead code, half-finished wiring, duplicated logic).
+  - Audit findings (2026-11-02, post PR #1 merge):
+    - Dead code: `flint_options_t.verbose` is declared (`source/flint.h`) but never read or used.
+    - Doc-only remnant: `--origin <mode>` appears in `print_usage` (`source/flint.c`) and session display, but has no CLI parser handler or option field — documented but not implemented.
+    - Half-wired remnant: `flint_config_t.open_in_tabs` is parsed, written to the config template, and documented, but never consumed by resume/launch logic.
+    - No debug leftovers (DEBUG/FIXME/XXX/HACK) found in source.
+    - No duplicated logic introduced by the merge resolution (fs_mkdir_p conflict resolved to single `int` version).
 - [ ] Test coverage is thin. Nothing covers config file parsing, `proc`, `journal`, the AI adapters, or `resume_mode` filtering.
 - [x] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Committed this TODO.md.
