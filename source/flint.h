@@ -118,4 +118,7 @@ void session_list_init(session_list_t *list);
 void session_list_add(session_list_t *list, const session_t *session);
 void session_list_free(session_list_t *list);
 
+/* Whether a session should be included given the resume mode filter */
+bool resume_session_should_include(const session_t *s, resume_mode_t mode);
+
 #endif /* FLINT_H */
