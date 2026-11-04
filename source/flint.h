@@ -104,6 +104,7 @@ typedef struct {
     bool dry_run;
     int lookback_hours;
     char target_terminal[MAX_NAME_LEN];
+    char wrapper_override[MAX_NAME_LEN];  /* --wrapper: prepend to every resume command */
     char workspace_filter[MAX_PATH_LEN];
     char config_path[MAX_PATH_LEN];
     bool list_terminals;

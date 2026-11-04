@@ -24,6 +24,9 @@ const tool_config_t *config_find_tool(const flint_config_t *cfg, const char *too
 void config_add_tool(flint_config_t *cfg, const char *name, const char *wrapper,
                      const char *model, const char *effort);
 
+/* Apply one wrapper to every configured tool (CLI --wrapper override). */
+void config_set_wrapper_all(flint_config_t *cfg, const char *wrapper);
+
 /* Format resume command using wrapper, model, and effort.
  * tool_cmd is the adapter binary name (e.g. "agy", "claude", "codex"). */
 void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,

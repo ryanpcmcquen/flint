@@ -8,7 +8,7 @@ typedef struct terminal_adapter {
     const char *display_name;   /* Human friendly name */
     const char *os;             /* "macos", "linux", "windows" */
     bool (*is_available)(void);
-    int (*launch_session)(const session_t *session, bool dry_run);
+    int (*launch_session)(const session_t *session, bool dry_run, bool open_in_tabs);
 } terminal_adapter_t;
 
 /* Get all registered terminal adapters */

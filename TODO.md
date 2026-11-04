@@ -1,6 +1,6 @@
 # Flint TODO
 
-Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make test` passes (40/40).
+Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make test` passes (48/48).
 
 ## Original items
 
@@ -23,7 +23,7 @@ Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make 
   - `wrapper` is **empty by default** — no hardcoded `graperoot` launcher anymore, and the `--init-config` template documents that an empty `wrapper` means "run the raw CLI".
   - Testing: new tests in `tests/test_flint.c` (lookup, format with/without wrapper, config file parsing for `[agy]` and `[codex]` alias sections). `make test` → 17/17.
   - End-to-end: `flint --init-config` writes a working template; `flint -c <file> --summary --dry-run` resolves the matching tool and prepends the configured wrapper to the resume command.
-  - Still open: a CLI override like `--wrapper <name>` isn't wired to `parse_args()`; the README has no `wrapper`/tool-config section yet.
+  - `--wrapper <name>` is now wired: it applies the launcher to every configured tool at runtime (`config_set_wrapper_all()`), covering tools without a config-file `wrapper` entry. README documents both the CLI flag and the tool-config format.
 - [x] **Verify the code is as performant as possible.** DONE for all identified hotspots; formal profiling/benchmarking still open.
   - Done so far: `proc_is_session_running()` caches the `ps -eo pid,command` output for the process lifetime instead of spawning `ps` per session.
   - Done so far: `lsof` cwd lookups are now cached per pid (`proc_lsof_cwd`).
@@ -52,8 +52,9 @@ Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make 
   - Audit findings (2026-11-02, post PR #1 merge):
     - Dead code: `flint_options_t.verbose` is declared (`source/flint.h`) but never read or used.
     - Doc-only remnant: `--origin <mode>` appeared in `print_usage` (`source/flint.c`) and the README usage block, but had no CLI parser handler or option field. **Resolved**: removed from both.
-    - Half-wired remnant: `flint_config_t.open_in_tabs` is parsed, written to the config template, and documented, but never consumed by resume/launch logic.
+    - Half-wired remnant: `flint_config_t.open_in_tabs` is parsed, written to the config template, and documented, but never consumed by resume/launch logic. **FIXED:** `open_in_tabs` is now passed through `resume_sessions()` into every terminal adapter, which opens tabs or windows accordingly (Apple Terminal, iTerm2, Ghostty, Kitty, GNOME Terminal, Konsole, Windows Terminal; Alacritty and PowerShell have no tab API and always open windows).
     - No debug leftovers (DEBUG/FIXME/XXX/HACK) found in source.
     - No duplicated logic introduced by the merge resolution (fs_mkdir_p conflict resolved to single `int` version).
-- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing via `flint_agy_parse_line` regression tests; OpenClaw discovery via adapter-level test; MCP focus/query + `mcp_collect_line` internals via new tests) are covered — suite now **45/45**. `proc` and `resume_mode` filtering are covered. Claude/Codex discovery + resume e2e still need real installs.
+- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing via `flint_agy_parse_line` regression tests; OpenClaw discovery via adapter-level test; MCP focus/query + `mcp_collect_line` internals via new tests) are covered — suite now **48/48**. Config defaults now cover OpenClaw and `open_in_tabs`, plus the `--wrapper` override. `proc` and `resume_mode` filtering are covered. Claude/Codex discovery + resume e2e still need real installs.
 - [x] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Committed this TODO.md.
+- [x] OpenClaw was discovered/resumed but missing from the default tool list, `--init-config` template, and README config example. Fixed: `config_init_defaults()` now adds `openclaw`, the template includes an `[openclaw]` section, and the README mirrors it.

@@ -26,6 +26,7 @@ void config_init_defaults(flint_config_t *cfg) {
     config_add_tool(cfg, "codex", "", "o3-mini", "high");
     config_add_tool(cfg, "cline", "", "", "");
     config_add_tool(cfg, "opencode", "", "", "");
+    config_add_tool(cfg, "openclaw", "", "", "");
 }
 
 void config_add_tool(flint_config_t *cfg, const char *name, const char *wrapper,
@@ -47,6 +48,15 @@ void config_add_tool(flint_config_t *cfg, const char *name, const char *wrapper,
     strncpy(tc->wrapper, wrapper, sizeof(tc->wrapper) - 1);
     strncpy(tc->model, model, sizeof(tc->model) - 1);
     strncpy(tc->effort, effort, sizeof(tc->effort) - 1);
+}
+
+void config_set_wrapper_all(flint_config_t *cfg, const char *wrapper) {
+    if (!cfg || !wrapper) return;
+    for (size_t i = 0; i < cfg->tool_config_count; i++) {
+        strncpy(cfg->tool_configs[i].wrapper, wrapper,
+                sizeof(cfg->tool_configs[i].wrapper) - 1);
+        cfg->tool_configs[i].wrapper[sizeof(cfg->tool_configs[i].wrapper) - 1] = '\0';
+    }
 }
 
 const tool_config_t *config_find_tool(const flint_config_t *cfg, const char *tool_cmd) {
@@ -339,6 +349,10 @@ bool config_create_default_file(const char *path) {
     fprintf(f, "model = \n");
     fprintf(f, "effort = \n\n");
     fprintf(f, "[opencode]\n");
+    fprintf(f, "wrapper = \n");
+    fprintf(f, "model = \n");
+    fprintf(f, "effort = \n\n");
+    fprintf(f, "[openclaw]\n");
     fprintf(f, "wrapper = \n");
     fprintf(f, "model = \n");
     fprintf(f, "effort = \n");

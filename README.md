@@ -89,6 +89,7 @@ Options:
   -r, --resume            Automatically resume all active sessions without prompting
   -t, --terminal <name>   Target terminal client (e.g. iterm2, ghostty, apple-terminal,
                           gnome-terminal, alacritty, kitty, windows-terminal)
+      --wrapper <name>    Prepend this launcher to every resume command
   -d, --days <N>          Look back N days (default: 1 day / 24 hours)
       --hours <H>         Look back H hours
   -w, --workspace <path>  Filter sessions to specific workspace directory
@@ -180,7 +181,7 @@ Global configuration keys:
 | `resume_mode` | `user` | `user`, `all`, or `agent` |
 | `journal_repo` | `~/notes/flint-journal` | Markdown journal / work-log repository |
 | `lookback_hours` | `24` | Hours to look back for sessions |
-| `open_in_tabs` | `true` | Open resumes in tabs |
+| `open_in_tabs` | `true` | Open resumes in tabs; `false` opens new windows |
 | `auto_journal` | `false` | Auto-record daily log |
 | `mcp_focus` | `true` | Query connected MCP tools for focus |
 
@@ -215,9 +216,14 @@ effort =
 wrapper =
 model =
 effort =
+
+[openclaw]
+wrapper =
+model =
+effort =
 ```
 
-- `wrapper` — launcher binary prepended to the resume command (e.g. `graperoot`); blank means run the raw CLI.
+- `wrapper` — launcher binary prepended to the resume command (e.g. `graperoot`); blank means run the raw CLI. The CLI flag `--wrapper <name>` overrides this for every tool at runtime.
 - `model` / `effort` — model and effort passed to the AI CLI.
 
 ---

@@ -14,10 +14,11 @@ static bool gnome_terminal_is_available(void) {
     return linux_has_bin("gnome-terminal");
 }
 
-static int gnome_terminal_launch(const session_t *session, bool dry_run) {
+static int gnome_terminal_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
     snprintf(cmd, sizeof(cmd),
-             "gnome-terminal --tab --working-directory=\"%s\" -- bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
+             "gnome-terminal %s --working-directory=\"%s\" -- bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
+             open_in_tabs ? "--tab" : "--window",
              session->workspace, session->resume_cmd);
 
     if (dry_run) {
@@ -41,8 +42,9 @@ static bool alacritty_linux_is_available(void) {
     return linux_has_bin("alacritty");
 }
 
-static int alacritty_linux_launch(const session_t *session, bool dry_run) {
+static int alacritty_linux_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
+    (void)open_in_tabs; /* Alacritty has no tab API; every launch is a window. */
     snprintf(cmd, sizeof(cmd),
              "alacritty --working-directory \"%s\" -e bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
              session->workspace, session->resume_cmd);
@@ -68,11 +70,17 @@ static bool kitty_linux_is_available(void) {
     return linux_has_bin("kitty");
 }
 
-static int kitty_linux_launch(const session_t *session, bool dry_run) {
+static int kitty_linux_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
-    snprintf(cmd, sizeof(cmd),
-             "kitty --directory \"%s\" bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
-             session->workspace, session->resume_cmd);
+    if (open_in_tabs) {
+        snprintf(cmd, sizeof(cmd),
+                 "kitty --single-instance --instance-group=flint launch --type=tab --directory \"%s\" bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
+                 session->workspace, session->resume_cmd);
+    } else {
+        snprintf(cmd, sizeof(cmd),
+                 "kitty --directory \"%s\" bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
+                 session->workspace, session->resume_cmd);
+    }
 
     if (dry_run) {
         printf("[Dry Run] Would execute: %s\n", cmd);
@@ -95,10 +103,11 @@ static bool konsole_is_available(void) {
     return linux_has_bin("konsole");
 }
 
-static int konsole_launch(const session_t *session, bool dry_run) {
+static int konsole_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
     snprintf(cmd, sizeof(cmd),
-             "konsole --workdir \"%s\" -e bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
+             "konsole %s--workdir \"%s\" -e bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
+             open_in_tabs ? "--new-tab " : "",
              session->workspace, session->resume_cmd);
 
     if (dry_run) {
@@ -121,7 +130,7 @@ const terminal_adapter_t term_konsole = {
 
 /* Stubs for non-Linux */
 static bool linux_stub_available(void) { return false; }
-static int linux_stub_launch(const session_t *s, bool d) { (void)s; (void)d; return -1; }
+static int linux_stub_launch(const session_t *s, bool d, bool t) { (void)s; (void)d; (void)t; return -1; }
 
 const terminal_adapter_t term_gnome_terminal = { "gnome-terminal", "GNOME Terminal", "linux", linux_stub_available, linux_stub_launch };
 const terminal_adapter_t term_alacritty_linux = { "alacritty", "Alacritty", "linux", linux_stub_available, linux_stub_launch };
