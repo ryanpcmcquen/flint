@@ -9,14 +9,14 @@
 When invoked in the morning, Flint:
 1. **Presents a morning brief**: Groups recent work by workspace and summarizes what was accomplished across your AI tools.
 2. **Suggests a focus for today**: Ranks where work was left unfinished, starting with uncommitted changes and recent commits.
-3. **Checks connected tools**: When a local MCP-capable host is available (OpenCode today), Flint runs a read-only query across connected MCP servers such as Slack to help prioritize the day.
+3. **Checks connected tools**: When an MCP-capable host is available, Flint runs a read-only query across connected MCP servers such as Slack to help prioritize the day.
 4. **Resumes active sessions**: Automatically re-opens each workspace in your preferred terminal client, spinning up tabs or windows with your active AI sessions right where you left off.
 
 ---
 
 ## Supported AI CLI Adapters
 
-Flint is adapter-based: each tool is discovered and resumed independently, and no single CLI is required. OpenCode is one supported adapter; it is also the current optional bridge for MCP focus.
+Flint is adapter-based: each tool is discovered, resumed, and used for MCP focus independently. No single CLI is required or preferred.
 
 | AI Tool | CLI Binary | Discovery & State Location |
 | :--- | :--- | :--- |
@@ -29,7 +29,18 @@ Flint is adapter-based: each tool is discovered and resumed independently, and n
 
 ### Messaging Clients & MCP Tools
 
-AI chat inside messaging clients (Slack, Microsoft Teams, Discord, WhatsApp, and more) is supported through **connected MCP servers**. MCP focus is optional: Flint currently uses OpenCode’s local API as the bridge (`opencode api mcp.list` plus a read-only `opencode run` prompt) because it exposes a scriptable MCP interface. The core brief, focus ranking, session discovery, and resume features work without OpenCode or any MCP host installed; if no bridge is available, MCP focus is skipped cleanly.
+AI chat inside messaging clients (Slack, Microsoft Teams, Discord, WhatsApp, and more) is supported through **connected MCP servers**. MCP focus is optional and works with any supported adapter that exposes a scriptable MCP surface:
+
+| Host | Server discovery | Read-only prompt |
+| :--- | :--- | :--- |
+| `agy` | `agy mcp list` | `agy -p --output-format json --mode plan` |
+| `claude` | `claude mcp list` | `claude -p --output-format json --permission-mode plan` |
+| `cline` | `cline config mcp --json` | `cline -p --json` |
+| `codex` | `codex mcp list --json` | `codex exec --json --sandbox read-only` |
+| `opencode` | `opencode api mcp.list` | `opencode run --agent plan --format json` |
+| `openclaw` | `openclaw mcp status --json` | `openclaw agent exec --json` |
+
+By default, Flint uses the host from your most recent session. If that host has no configured MCP servers, it falls back through the other installed adapters. Pin one explicitly with `mcp_host = <name>`; if no host has a connected server, MCP focus is skipped cleanly. The core brief, focus ranking, session discovery, and resume features work without any MCP host installed.
 
 Set `mcp_focus = false` in `~/.config/flint/config` to disable this feature.
 
@@ -186,14 +197,19 @@ Global configuration keys:
 | `open_in_tabs` | `true` | Open resumes in tabs; `false` opens new windows |
 | `auto_journal` | `false` | Auto-record daily log |
 | `mcp_focus` | `true` | Query connected MCP tools for focus |
+| `mcp_host` | `auto` | MCP host: `auto`, `agy`, `claude`, `cline`, `codex`, `opencode`, or `openclaw` |
 
-MCP focus queries are enabled by default. Disable them globally with `mcp_focus = false`, or per run with `--no-mcp`. Flint only queries when an MCP-capable local host is available (currently OpenCode) and reports at least one connected MCP server, and the query is read-only. Any priorities returned by the connected tools are merged into the ranked "Focus for today" list, and connected messaging clients such as Slack or Microsoft Teams are covered automatically through their MCP servers.
+MCP focus queries are enabled by default. Disable them globally with `mcp_focus = false`, or per run with `--no-mcp`. In `auto` mode Flint follows your most recent session, then falls back through the other installed adapters. Set `mcp_host` to pin one host. Flint only queries when the selected host reports at least one connected MCP server, and the query is read-only. Any priorities returned by the connected tools are merged into the ranked "Focus for today" list, and connected messaging clients such as Slack or Microsoft Teams are covered automatically through their MCP servers.
 
 ### Full Configuration File Format
 
 The `[tool]` sections of `~/.config/flint/config` (friendly aliases such as `[antigravity]`, `[openai]`, `[open-code]` are accepted):
 
 ```ini
+# Global MCP selection: auto follows the most recent session
+mcp_focus = true
+mcp_host = auto
+
 [agy]
 wrapper =
 model = gemini-3.8-flash
@@ -247,7 +263,7 @@ flint/
     │   ├── claude.c         # Claude Code integration
     │   ├── cline.c          # Cline session store integration
     │   ├── codex.c          # OpenAI Codex CLI integration
-    │   ├── mcp.c / mcp.h    # MCP host bridge & read-only focus query (OpenCode today)
+    │   ├── mcp.c / mcp.h    # Per-CLI MCP host bridge & read-only focus query
     │   ├── opencode.c       # OpenCode local API integration
     │   └── openclaw.c       # OpenClaw CLI session store & resume integration
     ├── brief/               # Grouped morning brief & ranked focus

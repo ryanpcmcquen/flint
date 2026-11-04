@@ -1,6 +1,6 @@
 # Flint TODO
 
-Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make test` passes (60/60).
+Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make test` passes (65/65).
 
 ## Original items
 
@@ -50,7 +50,7 @@ Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make 
   - Claude: recursively scans `~/.claude/projects/**/*.jsonl`, reads the transcript head for `sessionId`, `cwd`, `isSidechain`, custom titles, generated summaries, and the first real user prompt. Resume: `claude --resume <session-id>`.
   - Codex: recursively scans `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`), parses the `session_meta` payload for `id`/`cwd`/git branch/subagent metadata, and falls back to the first bare metadata object used by older rollouts. Summaries come from `event_msg`/`response_item` user messages. Resume: `codex resume <thread-id>`.
   - The old placeholder logic (Claude `"claude-session"` IDs and `%2F` project-name decoding; Codex top-level `~/.codex` entries with workspace `~`) is gone.
-  - Fixture tests cover array/string Claude content, custom titles, sidechains, Codex `session_meta`, `event_msg`, `response_item`, subagent metadata, malformed input, and temp-home discovery. E2E dry-run against a synthetic `HOME` produced both resume commands. Suite is now **60/60**.
+  - Fixture tests cover array/string Claude content, custom titles, sidechains, Codex `session_meta`, `event_msg`, `response_item`, subagent metadata, malformed input, and temp-home discovery. E2E dry-run against a synthetic `HOME` produced both resume commands. Suite is now **65/65**.
   - Known limits: Codex rollouts compressed as `.jsonl.zst` and sessions under `~/.codex/archived_sessions/` are not scanned yet; Claude's undocumented transcript schema can change between releases (the parser tolerates unknown lines and truncated tails).
 - [x] `proc_is_session_running()` matches `strstr(prog, tool_cmd)`, so a short name like `agy` can match unrelated command lines. Fixed: POSIX branch now extracts the executable basename from the first command token (after any path) and compares it to the tool name case-insensitively; workspace fallback (lsof cwd check) unchanged. Windows branch already compared exact exe names (`tool_cmd` vs `tool_cmd.exe`) and ignores the workspace — left as a known limitation.
 - [x] Audit the codebase for remnants / cleanup after AI model & CLI switching experiments (stale flags, dead code, half-finished wiring, duplicated logic).
@@ -60,8 +60,16 @@ Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make 
     - Half-wired remnant: `flint_config_t.open_in_tabs` is parsed, written to the config template, and documented, but never consumed by resume/launch logic. **FIXED:** `open_in_tabs` is now passed through `resume_sessions()` into every terminal adapter, which opens tabs or windows accordingly (Apple Terminal, iTerm2, Ghostty, Kitty, GNOME Terminal, Konsole, Windows Terminal; Alacritty and PowerShell have no tab API and always open windows).
     - No debug leftovers (DEBUG/FIXME/XXX/HACK) found in source.
     - No duplicated logic introduced by the merge resolution (fs_mkdir_p conflict resolved to single `int` version).
-- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing via `flint_agy_parse_line` regression tests; OpenClaw discovery via adapter-level test; Claude/Codex head parsing + temp-home discovery; MCP focus/query + `mcp_collect_line` internals via new tests) are covered — suite now **60/60**. Config defaults now cover OpenClaw and `open_in_tabs`, plus the `--wrapper` override and `[openclaw]` section parsing. `proc` and `resume_mode` filtering are covered. Remaining gap: real-CLI Claude/Codex resume e2e still needs the binaries installed.
+- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing via `flint_agy_parse_line` regression tests; OpenClaw discovery via adapter-level test; Claude/Codex head parsing + temp-home discovery; per-CLI MCP list/result parsers + prompt-command builders; MCP focus/query + `mcp_collect_line` internals via new tests) are covered — suite now **65/65**. Config defaults now cover OpenClaw and `open_in_tabs`, plus the `--wrapper` override, `[openclaw]` section parsing, and `mcp_host`. `proc` and `resume_mode` filtering are covered. Remaining gap: real-CLI Claude/Codex resume e2e still needs the binaries installed.
 - [x] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Committed this TODO.md.
 - [x] OpenClaw was discovered/resumed but missing from the default tool list, `--init-config` template, and README config example. Fixed: `config_init_defaults()` now adds `openclaw`, the template includes an `[openclaw]` section, and the README mirrors it.
 - [x] **Heap-buffer-overflow in `run_prompt()` (`source/ai/mcp.c`), found with ASan:** the command buffer size was computed from `strlen()` of freshly malloc'd, uninitialized quote buffers. Fixed by quoting first and sizing the command from the initialized strings; the MCP prompt test no longer invokes `opencode` for a rejected input. Full suite is ASan/UBSan-clean.
-- [ ] **MCP focus is only host-agnostic in design, not yet in implementation.** Session discovery/resume are adapter-based and CLI-agnostic, but `source/ai/mcp.c` currently shells out to OpenCode for `api mcp.list` and the read-only `run` prompt. README now states this explicitly and frames OpenCode as optional. Next step: isolate the host bridge behind a small interface and add a second backend (e.g. Claude Code or Codex MCP commands) once those CLIs can be verified locally.
+- [x] **MCP focus is now host-agnostic across every supported CLI.** `source/ai/mcp.c` has per-host server discovery and read-only prompt backends:
+  - `agy`: `agy mcp list` / `agy -p --output-format json --mode plan`
+  - `claude`: `claude mcp list` / `claude -p --output-format json --permission-mode plan --no-session-persistence`
+  - `cline`: `cline config mcp --json` / `cline -p --json`
+  - `codex`: `codex mcp list --json` / `codex exec --json --ephemeral --sandbox read-only`
+  - `opencode`: `opencode api mcp.list` / `opencode run --agent plan --format json`
+  - `openclaw`: `openclaw mcp status --json` / `openclaw agent exec --json`
+  - Host selection follows the most recent session, then falls back through other installed adapters. `mcp_host` can pin one explicitly. There is no built-in preference for any CLI.
+  - Tests cover every host's list parser, result parser, and prompt-command builder, plus recent-session host selection. A synthetic `PATH`/`HOME` e2e confirmed Claude is selected from the recent session and its MCP priorities are merged into focus.

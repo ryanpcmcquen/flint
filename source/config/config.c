@@ -223,6 +223,9 @@ static void parse_line(char *line, char *current_section, size_t section_size, f
             cfg->auto_journal = (strcasecmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcasecmp(val, "yes") == 0);
         } else if (strcasecmp(key, "mcp_focus") == 0) {
             cfg->mcp_focus = (strcasecmp(val, "true") == 0 || strcmp(val, "1") == 0 || strcasecmp(val, "yes") == 0);
+        } else if (strcasecmp(key, "mcp_host") == 0) {
+            strncpy(cfg->mcp_host, val, sizeof(cfg->mcp_host) - 1);
+            cfg->mcp_host[sizeof(cfg->mcp_host) - 1] = '\0';
         }
         return;
     }
@@ -322,6 +325,9 @@ bool config_create_default_file(const char *path) {
     fprintf(f, "lookback_hours = 24\n\n");
     fprintf(f, "# Query connected MCP tools (Slack, etc.) for today's focus\n");
     fprintf(f, "mcp_focus = true\n\n");
+    fprintf(f, "# MCP host to use: auto (default), agy, claude, cline, codex, opencode, openclaw\n");
+    fprintf(f, "# auto follows your most recent session, then falls back to other installed hosts\n");
+    fprintf(f, "mcp_host = auto\n\n");
     fprintf(f, "# ----------------------------------------------------------\n");
     fprintf(f, "# Tool configurations\n");
     fprintf(f, "# ----------------------------------------------------------\n");

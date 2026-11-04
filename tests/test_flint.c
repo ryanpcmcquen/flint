@@ -433,6 +433,21 @@ static void test_config_file_parsing(void) {
     config_destroy(&cfg4);
     remove(path);
     PASS();
+
+    TEST("config file parsing: mcp_host");
+    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    f = fopen(path, "w");
+    assert(f);
+    fprintf(f, "mcp_host = cline\n");
+    fclose(f);
+
+    flint_config_t cfg6;
+    config_init_defaults(&cfg6);
+    assert(config_load(path, &cfg6));
+    assert(strcmp(cfg6.mcp_host, "cline") == 0);
+    config_destroy(&cfg6);
+    remove(path);
+    PASS();
 }
 
 static void test_brief_and_mcp(void) {
@@ -792,9 +807,9 @@ static void test_mcp_focus_internals(void) {
 
     TEST("mcp_query_prompt rejects unusable inputs");
     char out2[512] = {0};
-    assert(mcp_query_prompt("/tmp/ws", "ctx", NULL, NULL, out2, sizeof(out2), NULL) == false);
-    assert(mcp_query_prompt("/tmp/ws", "ctx", NULL, "instructions", out2, 0, NULL) == false);
-    assert(mcp_query_prompt(NULL, "ctx", "instructions", "instructions", out2, sizeof(out2), NULL) == false);
+    assert(mcp_query_prompt("opencode", "/tmp/ws", "ctx", NULL, NULL, out2, sizeof(out2), NULL) == false);
+    assert(mcp_query_prompt("opencode", "/tmp/ws", "ctx", NULL, "instructions", out2, 0, NULL) == false);
+    assert(mcp_query_prompt("opencode", NULL, "ctx", "instructions", "instructions", out2, sizeof(out2), NULL) == false);
     PASS();
 
     TEST("mcp_collect_line accumulates text and session id");
@@ -821,6 +836,147 @@ static void test_mcp_focus_internals(void) {
     const char *line3 = "{\"type\":\"agent_message\",\"part\":{\"type\":\"text\",\"text\":\"- Ignored\"}}";
     flint_mcp_collect_line(line3, (int)strlen(line3), &run3);
     assert(run3.text[0] == '\0');
+    PASS();
+}
+
+static void test_mcp_host_backends(void) {
+    TEST("mcp server list parsers cover every host");
+    char servers[512] = {0};
+
+    const char *agy_list =
+        "NAME  TYPE   STATUS   COMMAND/URL\n"
+        "slack stdio  enabled  npx slack-mcp\n"
+        "off   http   disabled https://off.example/mcp\n";
+    assert(flint_mcp_parse_servers("agy", agy_list, servers, sizeof(servers)));
+    assert(strcmp(servers, "slack") == 0);
+
+    const char *claude_list =
+        "slack: https://mcp.slack.com/mcp (HTTP) - ✔ Connected\n"
+        "broken: npx broken (stdio) - ✘ Failed to connect\n"
+        "github: npx github (stdio) - ✔ Connected\n";
+    assert(flint_mcp_parse_servers("claude", claude_list, servers, sizeof(servers)));
+    assert(strcmp(servers, "slack, github") == 0);
+
+    const char *cline_list =
+        "[{\"name\":\"foo\",\"disabled\":false},{\"name\":\"bar\",\"disabled\":true}]";
+    assert(flint_mcp_parse_servers("cline", cline_list, servers, sizeof(servers)));
+    assert(strcmp(servers, "foo") == 0);
+
+    const char *codex_list =
+        "[{\"name\":\"docs\",\"enabled\":true,\"auth_status\":\"unsupported\"},"
+        "{\"name\":\"off\",\"enabled\":false,\"auth_status\":\"unsupported\"},"
+        "{\"name\":\"auth\",\"enabled\":true,\"auth_status\":\"not_logged_in\"}]";
+    assert(flint_mcp_parse_servers("codex", codex_list, servers, sizeof(servers)));
+    assert(strcmp(servers, "docs") == 0);
+
+    const char *opencode_list =
+        "{\"data\":[{\"name\":\"slack\",\"status\":\"connected\"},"
+        "{\"name\":\"off\",\"status\":\"disconnected\"}]}";
+    assert(flint_mcp_parse_servers("opencode", opencode_list, servers, sizeof(servers)));
+    assert(strcmp(servers, "slack") == 0);
+
+    const char *openclaw_list =
+        "{\"servers\":[{\"name\":\"foo\",\"configured\":true,\"enabled\":true,\"ok\":true},"
+        "{\"name\":\"off\",\"enabled\":false,\"ok\":true},"
+        "{\"name\":\"bad\",\"enabled\":true,\"ok\":false}]}";
+    assert(flint_mcp_parse_servers("openclaw", openclaw_list, servers, sizeof(servers)));
+    assert(strcmp(servers, "foo") == 0);
+    PASS();
+
+    TEST("mcp result parsers cover every host");
+    char result[512] = {0};
+    char session_id[MAX_NAME_LEN] = {0};
+
+    assert(flint_mcp_parse_result("agy",
+        "{\"result\":\"- Agy priority\",\"sessionId\":\"conv-1\"}",
+        result, sizeof(result), session_id));
+    assert(strcmp(result, "- Agy priority") == 0);
+    assert(strcmp(session_id, "conv-1") == 0);
+
+    assert(flint_mcp_parse_result("claude",
+        "{\"result\":\"- Claude priority\",\"session_id\":\"sess-1\"}",
+        result, sizeof(result), session_id));
+    assert(strcmp(result, "- Claude priority") == 0);
+    assert(strcmp(session_id, "sess-1") == 0);
+
+    const char *cline_output =
+        "{\"type\":\"agent_event\",\"event\":{\"type\":\"done\",\"text\":\"draft\"}}\n"
+        "{\"type\":\"run_result\",\"text\":\"- Cline priority\"}\n";
+    assert(flint_mcp_parse_result("cline", cline_output, result, sizeof(result), session_id));
+    assert(strcmp(result, "- Cline priority") == 0);
+
+    const char *codex_output =
+        "{\"type\":\"thread.started\",\"thread_id\":\"thread-1\"}\n"
+        "{\"type\":\"item.completed\",\"item\":{\"type\":\"agent_message\","
+        "\"text\":\"- Codex priority\"}}\n";
+    assert(flint_mcp_parse_result("codex", codex_output, result, sizeof(result), session_id));
+    assert(strcmp(result, "- Codex priority") == 0);
+    assert(strcmp(session_id, "thread-1") == 0);
+
+    const char *opencode_output =
+        "{\"type\":\"text\",\"sessionID\":\"ses_1\","
+        "\"part\":{\"type\":\"text\",\"text\":\"- OpenCode priority\"}}\n";
+    assert(flint_mcp_parse_result("opencode", opencode_output, result, sizeof(result), session_id));
+    assert(strcmp(result, "- OpenCode priority") == 0);
+    assert(strcmp(session_id, "ses_1") == 0);
+
+    assert(flint_mcp_parse_result("openclaw",
+        "{\"ok\":true,\"final\":\"- OpenClaw priority\",\"sessionId\":\"claw-1\"}",
+        result, sizeof(result), session_id));
+    assert(strcmp(result, "- OpenClaw priority") == 0);
+    assert(strcmp(session_id, "claw-1") == 0);
+    PASS();
+
+    TEST("mcp prompt commands are host-specific");
+    char cmd[2048] = {0};
+    assert(flint_mcp_build_prompt_command("agy", "/tmp/ws", "hello world", cmd, sizeof(cmd)));
+    assert(strstr(cmd, "agy -p --output-format json") != NULL);
+    assert(strstr(cmd, "opencode") == NULL);
+
+    assert(flint_mcp_build_prompt_command("claude", "/tmp/ws", "hello world", cmd, sizeof(cmd)));
+    assert(strstr(cmd, "claude -p --output-format json") != NULL);
+    assert(strstr(cmd, "--no-session-persistence") != NULL);
+
+    assert(flint_mcp_build_prompt_command("cline", "/tmp/ws", "hello world", cmd, sizeof(cmd)));
+    assert(strstr(cmd, "cline -p --json") != NULL);
+
+    assert(flint_mcp_build_prompt_command("codex", "/tmp/ws", "hello world", cmd, sizeof(cmd)));
+    assert(strstr(cmd, "codex --ask-for-approval never exec --json") != NULL);
+    assert(strstr(cmd, "--ephemeral") != NULL);
+
+    assert(flint_mcp_build_prompt_command("opencode", "/tmp/ws", "hello world", cmd, sizeof(cmd)));
+    assert(strstr(cmd, "opencode run") != NULL);
+
+    assert(flint_mcp_build_prompt_command("openclaw", "/tmp/ws", "hello world", cmd, sizeof(cmd)));
+    assert(strstr(cmd, "openclaw agent exec --json") != NULL);
+    PASS();
+
+    TEST("mcp preferred host follows recent session unless pinned");
+    session_list_t list;
+    session_list_init(&list);
+
+    session_t claude = {0};
+    claude.last_active = 100;
+    strncpy(claude.tool_cmd, "claude", sizeof(claude.tool_cmd) - 1);
+    session_list_add(&list, &claude);
+
+    session_t codex = {0};
+    codex.last_active = 200;
+    strncpy(codex.tool_cmd, "codex", sizeof(codex.tool_cmd) - 1);
+    session_list_add(&list, &codex);
+
+    flint_config_t cfg;
+    config_init_defaults(&cfg);
+    assert(strcmp(flint_mcp_preferred_host(&cfg, &list), "codex") == 0);
+
+    strncpy(cfg.mcp_host, "cline", sizeof(cfg.mcp_host) - 1);
+    assert(strcmp(flint_mcp_preferred_host(&cfg, &list), "cline") == 0);
+
+    strncpy(cfg.mcp_host, "auto", sizeof(cfg.mcp_host) - 1);
+    assert(strcmp(flint_mcp_preferred_host(&cfg, &list), "codex") == 0);
+
+    config_destroy(&cfg);
+    session_list_free(&list);
     PASS();
 }
 
@@ -947,6 +1103,7 @@ int main(void) {
     test_config_file_parsing();
     test_brief_and_mcp();
     test_mcp_focus_internals();
+    test_mcp_host_backends();
     test_git_inspection();
     test_journal_generation();
     test_proc_running();
