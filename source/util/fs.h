@@ -33,6 +33,9 @@ char *fs_read_file(const char *path, size_t *out_size);
 /* Read up to max_bytes from the tail of a file. Free with free(). */
 char *fs_read_tail(const char *path, size_t max_bytes, size_t *out_size);
 
+/* Read up to max_bytes from the head of a file. Free with free(). */
+char *fs_read_head(const char *path, size_t max_bytes, size_t *out_size);
+
 /* Get last modification time of a file/directory */
 time_t fs_get_mod_time(const char *path);
 
@@ -47,6 +50,8 @@ int fs_list_dir(const char *dir_path, fs_dir_callback_t callback, void *userdata
 
 /* String utilities */
 void str_trim(char *str);
+/* Collapse runs of whitespace (including newlines/tabs) to single spaces and trim. */
+void str_collapse_whitespace(char *str);
 bool str_has_prefix(const char *str, const char *prefix);
 bool str_has_suffix(const char *str, const char *suffix);
 bool str_contains_ignore_case(const char *haystack, const char *needle);

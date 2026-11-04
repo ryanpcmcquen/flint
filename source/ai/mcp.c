@@ -291,14 +291,12 @@ static bool run_prompt(const char *workspace, const char *context, const char *s
     char *quoted_prompt = (char *)malloc(quoted_prompt_size);
     char *quoted_workspace = (char *)malloc(quoted_workspace_size);
     char *quoted_title = (char *)malloc(64);
-    char *cmd = (char *)malloc(strlen(quoted_prompt) + strlen(quoted_workspace) + 256);
 
-    if (!quoted_prompt || !quoted_workspace || !quoted_title || !cmd) {
+    if (!quoted_prompt || !quoted_workspace || !quoted_title) {
         free(prompt);
         free(quoted_prompt);
         free(quoted_workspace);
         free(quoted_title);
-        free(cmd);
         return false;
     }
 
@@ -306,7 +304,18 @@ static bool run_prompt(const char *workspace, const char *context, const char *s
     exec_shell_quote(workspace, quoted_workspace, quoted_workspace_size);
     exec_shell_quote("Flint focus query", quoted_title, 64);
 
-    snprintf(cmd, strlen(quoted_prompt) + strlen(quoted_workspace) + 256,
+    size_t cmd_size = strlen(quoted_prompt) + strlen(quoted_workspace) +
+                      strlen(quoted_title) + 256;
+    char *cmd = (char *)malloc(cmd_size);
+    if (!cmd) {
+        free(prompt);
+        free(quoted_prompt);
+        free(quoted_workspace);
+        free(quoted_title);
+        return false;
+    }
+
+    snprintf(cmd, cmd_size,
              "cd %s && opencode run --agent plan --auto --format json --title %s %s",
              quoted_workspace, quoted_title, quoted_prompt);
 
