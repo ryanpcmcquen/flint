@@ -182,7 +182,7 @@ static void test_config_and_wrappers(void) {
     TEST("config_init_defaults (no default wrapper)");
     flint_config_t cfg;
     config_init_defaults(&cfg);
-    assert(cfg.tool_config_count == 5);
+    assert(cfg.tool_config_count == 6);
     assert(cfg.mcp_focus == true);
     const tool_config_t *agy = config_find_tool(&cfg, "agy");
     assert(agy != NULL);
@@ -285,6 +285,33 @@ static void test_config_and_wrappers(void) {
     assert(strstr(cmd9, "openclaw resume agent:main:main") != NULL);
     config_destroy(&cfg10);
     PASS();
+
+    TEST("config defaults include OpenClaw and open_in_tabs");
+    flint_config_t cfg11;
+    config_init_defaults(&cfg11);
+    assert(cfg11.open_in_tabs == true);
+    assert(config_find_tool(&cfg11, "openclaw") != NULL);
+    config_destroy(&cfg11);
+    PASS();
+
+    TEST("config_set_wrapper_all applies the --wrapper override");
+    flint_config_t cfg12;
+    config_init_defaults(&cfg12);
+    config_set_wrapper_all(&cfg12, "graperoot");
+    for (size_t i = 0; i < cfg12.tool_config_count; i++) {
+        assert(strcmp(cfg12.tool_configs[i].wrapper, "graperoot") == 0);
+    }
+    char cmd10[512] = {0};
+    config_format_tool_cmd(&cfg12, "openclaw", "agent:main:main", cmd10, sizeof(cmd10));
+    assert(strncmp(cmd10, "graperoot openclaw resume", 25) == 0);
+
+    /* An empty override clears the launcher. */
+    config_set_wrapper_all(&cfg12, "");
+    char cmd11[512] = {0};
+    config_format_tool_cmd(&cfg12, "openclaw", "agent:main:main", cmd11, sizeof(cmd11));
+    assert(strncmp(cmd11, "openclaw resume", 15) == 0);
+    config_destroy(&cfg12);
+    PASS();
 }
 
 static void test_config_file_parsing(void) {
@@ -345,6 +372,21 @@ static void test_config_file_parsing(void) {
     assert(config_load(path, &cfg3));
     assert(cfg3.mcp_focus == false);
     config_destroy(&cfg3);
+    remove(path);
+    PASS();
+
+    TEST("config file parsing: open_in_tabs");
+    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    f = fopen(path, "w");
+    assert(f);
+    fprintf(f, "open_in_tabs = false\n");
+    fclose(f);
+
+    flint_config_t cfg4;
+    config_init_defaults(&cfg4);
+    assert(config_load(path, &cfg4));
+    assert(cfg4.open_in_tabs == false);
+    config_destroy(&cfg4);
     remove(path);
     PASS();
 }

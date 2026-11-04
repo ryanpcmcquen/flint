@@ -16,11 +16,12 @@ static bool wt_is_available(void) {
     return win_has_cmd("wt.exe");
 }
 
-static int wt_launch(const session_t *session, bool dry_run) {
+static int wt_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
-    /* wt.exe -w 0 new-tab -d "path" cmd /k "resume_cmd" */
+    /* wt.exe -w 0 new-tab/new-window -d "path" cmd /k "resume_cmd" */
     snprintf(cmd, sizeof(cmd),
-             "wt.exe -w 0 new-tab -d \"%s\" cmd.exe /k \"%s\"",
+             "wt.exe -w 0 %s -d \"%s\" cmd.exe /k \"%s\"",
+             open_in_tabs ? "new-tab" : "new-window",
              session->workspace, session->resume_cmd);
 
     if (dry_run) {
@@ -44,8 +45,9 @@ static bool powershell_is_available(void) {
     return true; /* Native on all modern Windows installations */
 }
 
-static int powershell_launch(const session_t *session, bool dry_run) {
+static int powershell_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
+    (void)open_in_tabs; /* PowerShell launches in a new console window. */
     snprintf(cmd, sizeof(cmd),
              "start powershell.exe -NoExit -Command \"Set-Location '%s'; %s\"",
              session->workspace, session->resume_cmd);
@@ -71,8 +73,9 @@ static bool alacritty_win_is_available(void) {
     return win_has_cmd("alacritty.exe");
 }
 
-static int alacritty_win_launch(const session_t *session, bool dry_run) {
+static int alacritty_win_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
+    (void)open_in_tabs; /* Alacritty has no tab API; every launch is a window. */
     snprintf(cmd, sizeof(cmd),
              "start alacritty.exe --working-directory \"%s\" -e cmd.exe /k \"%s\"",
              session->workspace, session->resume_cmd);
@@ -97,7 +100,7 @@ const terminal_adapter_t term_alacritty_win = {
 
 /* Stubs for non-Windows */
 static bool win_stub_available(void) { return false; }
-static int win_stub_launch(const session_t *s, bool d) { (void)s; (void)d; return -1; }
+static int win_stub_launch(const session_t *s, bool d, bool t) { (void)s; (void)d; (void)t; return -1; }
 
 const terminal_adapter_t term_windows_terminal = { "windows-terminal", "Windows Terminal", "windows", win_stub_available, win_stub_launch };
 const terminal_adapter_t term_powershell = { "powershell", "PowerShell", "windows", win_stub_available, win_stub_launch };

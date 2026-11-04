@@ -20,6 +20,7 @@
 #endif
 
 /* Strict positive-integer parse. Returns false on empty/invalid input. */
+#ifndef TEST_MODE
 static bool parse_positive_int(const char *s, int *out) {
     if (!s || !s[0]) return false;
     char *end = NULL;
@@ -29,6 +30,7 @@ static bool parse_positive_int(const char *s, int *out) {
     *out = (int)val;
     return true;
 }
+#endif
 
 void session_list_init(session_list_t *list) {
     if (!list) return;
@@ -123,6 +125,7 @@ static void print_usage(const char *prog_name) {
     printf("  -r, --resume            Automatically resume all active sessions without prompting\n");
     printf("  -t, --terminal <name>   Target terminal client (iterm2, ghostty, kitty, apple-terminal,\n");
     printf("                          gnome-terminal, alacritty, konsole, windows-terminal, powershell)\n");
+    printf("      --wrapper <name>    Prepend this launcher to every resume command\n");
     printf("  -d, --days <N>          Look back N days (default: 1 day / 24 hours)\n");
     printf("      --hours <H>         Look back H hours\n");
     printf("  -w, --workspace <path>  Filter sessions to specific workspace directory\n");
@@ -189,6 +192,8 @@ static int parse_args(int argc, char **argv, flint_options_t *opts) {
             strncpy(opts->config_path, argv[++i], sizeof(opts->config_path) - 1);
         } else if ((strcmp(arg, "-t") == 0 || strcmp(arg, "--terminal") == 0) && i + 1 < argc) {
             strncpy(opts->target_terminal, argv[++i], sizeof(opts->target_terminal) - 1);
+        } else if (strcmp(arg, "--wrapper") == 0 && i + 1 < argc) {
+            strncpy(opts->wrapper_override, argv[++i], sizeof(opts->wrapper_override) - 1);
         } else if ((strcmp(arg, "-d") == 0 || strcmp(arg, "--days") == 0) && i + 1 < argc) {
             int days = 0;
             if (parse_positive_int(argv[++i], &days)) opts->lookback_hours = days * 24;
@@ -257,7 +262,8 @@ static void print_summary(const session_list_t *list) {
     printf("\n  " ANSI_DIM "────────────────────────────────────────────────────────────" ANSI_RESET "\n\n");
 }
 
-static int resume_sessions(const session_list_t *list, const terminal_adapter_t *term, bool dry_run) {
+static int resume_sessions(const session_list_t *list, const terminal_adapter_t *term,
+                           bool dry_run, bool open_in_tabs) {
     if (!term) {
         fprintf(stderr, "Error: No suitable terminal client detected or specified.\n");
         return -1;
@@ -276,8 +282,9 @@ static int resume_sessions(const session_list_t *list, const terminal_adapter_t 
         return 0;
     }
 
-    printf(ANSI_BOLD "  Resuming %zu session(s) in tabs via %s%s...\n" ANSI_RESET,
-           launch_count, term->display_name, dry_run ? " (Dry Run)" : "");
+    printf(ANSI_BOLD "  Resuming %zu session(s) in %s via %s%s...\n" ANSI_RESET,
+           launch_count, open_in_tabs ? "tabs" : "windows",
+           term->display_name, dry_run ? " (Dry Run)" : "");
 
     for (size_t i = 0; i < list->count; i++) {
         const session_t *s = &list->items[i];
@@ -286,10 +293,12 @@ static int resume_sessions(const session_list_t *list, const terminal_adapter_t 
             continue;
         }
 
-        printf("  " ANSI_CYAN "→" ANSI_RESET " Opening tab for [%s] in %s\n", s->tool_cmd, s->workspace);
-        int res = term->launch_session(s, dry_run);
+        printf("  " ANSI_CYAN "→" ANSI_RESET " Opening %s for [%s] in %s\n",
+               open_in_tabs ? "tab" : "window", s->tool_cmd, s->workspace);
+        int res = term->launch_session(s, dry_run, open_in_tabs);
         if (res != 0 && !dry_run) {
-            fprintf(stderr, "    " ANSI_RED "Failed to launch tab in %s (exit code %d)\n" ANSI_RESET, term->display_name, res);
+            fprintf(stderr, "    " ANSI_RED "Failed to launch %s in %s (exit code %d)\n" ANSI_RESET,
+                    open_in_tabs ? "tab" : "window", term->display_name, res);
         }
     }
 
@@ -313,6 +322,9 @@ int main(int argc, char **argv) {
     }
     if (opts.mcp_focus_override >= 0) {
         cfg.mcp_focus = opts.mcp_focus_override != 0;
+    }
+    if (opts.wrapper_override[0] != '\0') {
+        config_set_wrapper_all(&cfg, opts.wrapper_override);
     }
 
     if (opts.list_terminals) {
@@ -446,8 +458,9 @@ int main(int argc, char **argv) {
     if (!should_resume && isatty(fileno(stdin))) {
         const char *mode_str = (cfg.resume_mode == RESUME_MODE_USER) ? "user" :
                                (cfg.resume_mode == RESUME_MODE_AGENT) ? "agent" : "all";
-        printf("  Resume %zu %s session(s) in tabs via " ANSI_BOLD "%s" ANSI_RESET "? [Y/n] ",
-               resumable_count, mode_str, target_term ? target_term->display_name : "terminal");
+        printf("  Resume %zu %s session(s) in %s via " ANSI_BOLD "%s" ANSI_RESET "? [Y/n] ",
+               resumable_count, mode_str, cfg.open_in_tabs ? "tabs" : "windows",
+               target_term ? target_term->display_name : "terminal");
         fflush(stdout);
 
         char input[32] = {0};
@@ -462,7 +475,7 @@ int main(int argc, char **argv) {
     }
 
     if (should_resume) {
-        resume_sessions(&resume_candidates, target_term, opts.dry_run);
+        resume_sessions(&resume_candidates, target_term, opts.dry_run, cfg.open_in_tabs);
     }
 
     session_list_free(&resume_candidates);
