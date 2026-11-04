@@ -9,12 +9,14 @@
 When invoked in the morning, Flint:
 1. **Presents a morning brief**: Groups recent work by workspace and summarizes what was accomplished across your AI tools.
 2. **Suggests a focus for today**: Ranks where work was left unfinished, starting with uncommitted changes and recent commits.
-3. **Checks connected tools**: If MCP servers such as Slack are connected through OpenCode, Flint runs a read-only query to help prioritize the day.
+3. **Checks connected tools**: When a local MCP-capable host is available (OpenCode today), Flint runs a read-only query across connected MCP servers such as Slack to help prioritize the day.
 4. **Resumes active sessions**: Automatically re-opens each workspace in your preferred terminal client, spinning up tabs or windows with your active AI sessions right where you left off.
 
 ---
 
-## Supported AI CLI Tools
+## Supported AI CLI Adapters
+
+Flint is adapter-based: each tool is discovered and resumed independently, and no single CLI is required. OpenCode is one supported adapter; it is also the current optional bridge for MCP focus.
 
 | AI Tool | CLI Binary | Discovery & State Location |
 | :--- | :--- | :--- |
@@ -27,7 +29,7 @@ When invoked in the morning, Flint:
 
 ### Messaging Clients & MCP Tools
 
-AI chat inside messaging clients (Slack, Microsoft Teams, Discord, WhatsApp, and more) is supported through **connected MCP servers**. Flint checks for connected MCP servers via `opencode api mcp.list`, then runs a read-only OpenCode agent prompt that combines your recent work context with messages from the connected platforms. The returned priorities are merged into the ranked “Focus for today” list.
+AI chat inside messaging clients (Slack, Microsoft Teams, Discord, WhatsApp, and more) is supported through **connected MCP servers**. MCP focus is optional: Flint currently uses OpenCode’s local API as the bridge (`opencode api mcp.list` plus a read-only `opencode run` prompt) because it exposes a scriptable MCP interface. The core brief, focus ranking, session discovery, and resume features work without OpenCode or any MCP host installed; if no bridge is available, MCP focus is skipped cleanly.
 
 Set `mcp_focus = false` in `~/.config/flint/config` to disable this feature.
 
@@ -185,7 +187,7 @@ Global configuration keys:
 | `auto_journal` | `false` | Auto-record daily log |
 | `mcp_focus` | `true` | Query connected MCP tools for focus |
 
-MCP focus queries are enabled by default. Disable them globally with `mcp_focus = false`, or per run with `--no-mcp`. Flint only queries when OpenCode reports at least one connected MCP server, and the query is read-only. Any priorities returned by the connected tools are merged into the ranked "Focus for today" list, and connected messaging clients such as Slack or Microsoft Teams are covered automatically through their MCP servers.
+MCP focus queries are enabled by default. Disable them globally with `mcp_focus = false`, or per run with `--no-mcp`. Flint only queries when an MCP-capable local host is available (currently OpenCode) and reports at least one connected MCP server, and the query is read-only. Any priorities returned by the connected tools are merged into the ranked "Focus for today" list, and connected messaging clients such as Slack or Microsoft Teams are covered automatically through their MCP servers.
 
 ### Full Configuration File Format
 
@@ -245,8 +247,8 @@ flint/
     │   ├── claude.c         # Claude Code integration
     │   ├── cline.c          # Cline session store integration
     │   ├── codex.c          # OpenAI Codex CLI integration
-    │   ├── mcp.c / mcp.h    # Connected MCP detection & read-only focus query
-    │   └── opencode.c       # OpenCode local API integration
+    │   ├── mcp.c / mcp.h    # MCP host bridge & read-only focus query (OpenCode today)
+    │   ├── opencode.c       # OpenCode local API integration
     │   └── openclaw.c       # OpenClaw CLI session store & resume integration
     ├── brief/               # Grouped morning brief & ranked focus
     │   └── brief.c / brief.h
