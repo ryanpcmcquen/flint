@@ -11,6 +11,29 @@ static void ensure_dir(const char *dir) {
     }
 }
 
+/* Push the journal repository to its configured remote (if any). */
+static void journal_push_to_remote(const char *repo) {
+    if (!repo || repo[0] == '\0') return;
+
+    char check_cmd[MAX_CMD_LEN * 2];
+#ifdef _WIN32
+    snprintf(check_cmd, sizeof(check_cmd), "git -C \"%s\" remote get-url origin >nul 2>&1", repo);
+#else
+    snprintf(check_cmd, sizeof(check_cmd), "git -C \"%s\" remote get-url origin >/dev/null 2>&1", repo);
+#endif
+    if (system(check_cmd) != 0) {
+        return; /* no remote named "origin" is configured */
+    }
+
+    char push_cmd[MAX_CMD_LEN * 2];
+#ifdef _WIN32
+    snprintf(push_cmd, sizeof(push_cmd), "git -C \"%s\" push origin >nul 2>&1", repo);
+#else
+    snprintf(push_cmd, sizeof(push_cmd), "git -C \"%s\" push origin >/dev/null 2>&1", repo);
+#endif
+    system(push_cmd);
+}
+
 int journal_record_daily(const flint_config_t *cfg, const session_list_t *list) {
     if (!cfg || !list) return -1;
     if (cfg->journal_repo[0] == '\0') return 0;
@@ -110,6 +133,7 @@ int journal_record_daily(const flint_config_t *cfg, const session_list_t *list) 
                  cfg->journal_repo, cfg->journal_repo, date_file);
 #endif
         system(git_cmd);
+        journal_push_to_remote(cfg->journal_repo);
     }
 
     return 0;
@@ -199,6 +223,7 @@ int journal_generate_weekly(const flint_config_t *cfg) {
         snprintf(git_cmd, sizeof(git_cmd), "git -C \"%s\" add . && git -C \"%s\" commit -m \"Weekly Summary: %s\" >/dev/null 2>&1",
                  cfg->journal_repo, cfg->journal_repo, out_filename);
         system(git_cmd);
+        journal_push_to_remote(cfg->journal_repo);
     }
 
     return 0;
@@ -253,6 +278,7 @@ int journal_generate_monthly(const flint_config_t *cfg) {
         snprintf(git_cmd, sizeof(git_cmd), "git -C \"%s\" add . && git -C \"%s\" commit -m \"Monthly Summary: %s\" >/dev/null 2>&1",
                  cfg->journal_repo, cfg->journal_repo, out_filename);
         system(git_cmd);
+        journal_push_to_remote(cfg->journal_repo);
     }
 
     return 0;
