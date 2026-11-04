@@ -5,6 +5,11 @@
 #include "../util/json.h"
 #include <string.h>
 
+/* MCP focus is intentionally isolated from the AI session adapters. Today
+ * OpenCode is the only implemented host bridge because it exposes scriptable
+ * `api mcp.list` and `run` commands; keep host-specific calls here so another
+ * MCP-capable CLI can be added without touching session discovery/resume. */
+
 #ifdef _WIN32
   #include <direct.h>
   #define getcwd _getcwd
