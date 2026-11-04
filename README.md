@@ -4,7 +4,7 @@
 
 > **Start your workday with clarity.**
 
-**Flint** is a fast, dependency-free command-line tool written in C99 designed to be run at the start of your workday. It integrates with modern AI CLI tools (Google **Antigravity CLI**, Anthropic **Claude Code**, OpenAI **ChatGPT Codex**, and more) across **macOS**, **Linux**, and **Windows**.
+**Flint** is a fast, dependency-free command-line tool written in C99 designed to be run at the start of your workday. It integrates with modern AI CLI tools (Google **Antigravity CLI**, Anthropic **Claude Code**, OpenAI **ChatGPT Codex**, OpenClaw, and more) across **macOS**, **Linux**, and **Windows**.
 
 When invoked in the morning, Flint:
 1. **Presents a morning brief**: Groups recent work by workspace and summarizes what was accomplished across your AI tools.
@@ -23,6 +23,7 @@ When invoked in the morning, Flint:
 | **ChatGPT Codex** | `codex` | `~/.codex/` session store & project history |
 | **Cline** | `cline` | `~/.cline/data/sessions/` session metadata & messages |
 | **OpenCode** | `opencode` | Local OpenCode session API (`opencode api session.list`) |
+| **OpenClaw** | `openclaw` | `openclaw sessions --json` session store & `openclaw resume <key>` |
 
 ### Messaging Clients & MCP Tools
 
@@ -240,6 +241,7 @@ flint/
     │   ├── codex.c          # OpenAI Codex CLI integration
     │   ├── mcp.c / mcp.h    # Connected MCP detection & read-only focus query
     │   └── opencode.c       # OpenCode local API integration
+    │   └── openclaw.c       # OpenClaw CLI session store & resume integration
     ├── brief/               # Grouped morning brief & ranked focus
     │   └── brief.c / brief.h
     ├── terminal/            # Terminal launchers & window/tab orchestration

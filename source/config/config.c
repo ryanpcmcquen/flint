@@ -128,6 +128,12 @@ void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --session %s", session_id);
         }
         snprintf(out_cmd, out_size, "%sopencode%s", prefix, flags);
+    } else if (strcmp(tool_cmd, "openclaw") == 0) {
+        char flags[512] = {0};
+        if (session_id && session_id[0] != '\0') {
+            snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " resume %s", session_id);
+        }
+        snprintf(out_cmd, out_size, "%sopenclaw%s", prefix, flags);
     } else {
         snprintf(out_cmd, out_size, "%s%s", prefix, tool_cmd);
     }

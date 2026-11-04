@@ -16,6 +16,7 @@ extern const ai_adapter_t claude_adapter;
 extern const ai_adapter_t codex_adapter;
 extern const ai_adapter_t cline_adapter;
 extern const ai_adapter_t opencode_adapter;
+extern const ai_adapter_t openclaw_adapter;
 
 /* Scan context threaded through Antigravity transcript line parsing. */
 typedef struct {
