@@ -1,6 +1,6 @@
 # Flint TODO
 
-Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make test` passes (26/26).
+Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make test` passes (40/40).
 
 ## Original items
 
@@ -16,7 +16,7 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
     - `opencode --session <ID>`
     - `openclaw resume agent:main:main` (new OpenClaw adapter: discovery via `openclaw sessions --json`, resume via `openclaw resume <key>`)
     - `claude` / `codex`: still missing installs (flags unverified).
-  - Added OpenClaw adapter (`source/ai/openclaw.c`, registered in the adapter registry) + `config_format_tool_cmd resumes OpenClaw sessions via resume` test; suite now **39/39**.
+  - Added OpenClaw adapter (`source/ai/openclaw.c`, registered in the adapter registry) + `config_format_tool_cmd resumes OpenClaw sessions via resume` test; suite now **39/39** (40/40 after the OpenClaw discovery test).
 - [x] **Make the inclusion of GrapeRoot configurable.** DONE.
   - Generalized into a full tool list: `flint_config_t` now holds an ordered `tool_configs` list instead of three fixed per-tool structs (`source/flint.h`). `config_add_tool()` / `config_find_tool()` manage it.
   - Config file sections `[agy]`, `[claude]`, `[codex]` (aliases `[antigravity]`, `[openai]` accepted) set `wrapper`, `model` and `effort`.
