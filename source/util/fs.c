@@ -192,6 +192,30 @@ char *fs_read_tail(const char *path, size_t max_bytes, size_t *out_size) {
     return buf;
 }
 
+char *fs_read_head(const char *path, size_t max_bytes, size_t *out_size) {
+    if (!path || max_bytes == 0) return NULL;
+    char expanded[1024];
+    fs_expand_path(path, expanded, sizeof(expanded));
+
+    FILE *f = fopen(expanded, "rb");
+    if (!f) return NULL;
+
+    char *buf = (char *)malloc(max_bytes + 1);
+    if (!buf) {
+        fclose(f);
+        return NULL;
+    }
+
+    size_t read_bytes = fread(buf, 1, max_bytes, f);
+    buf[read_bytes] = '\0';
+    fclose(f);
+
+    if (out_size) {
+        *out_size = read_bytes;
+    }
+    return buf;
+}
+
 time_t fs_get_mod_time(const char *path) {
     if (!path) return 0;
     char expanded[1024];
@@ -279,6 +303,28 @@ int fs_list_dir(const char *dir_path, fs_dir_callback_t callback, void *userdata
     closedir(d);
     return 0;
 #endif
+}
+
+void str_collapse_whitespace(char *str) {
+    if (!str) return;
+
+    char *read = str;
+    char *write = str;
+    bool pending_space = false;
+
+    while (*read) {
+        if (isspace((unsigned char)*read)) {
+            if (write != str) pending_space = true;
+        } else {
+            if (pending_space) {
+                *write++ = ' ';
+                pending_space = false;
+            }
+            *write++ = *read;
+        }
+        read++;
+    }
+    *write = '\0';
 }
 
 void str_trim(char *str) {

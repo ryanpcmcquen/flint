@@ -19,8 +19,8 @@ When invoked in the morning, Flint:
 | AI Tool | CLI Binary | Discovery & State Location |
 | :--- | :--- | :--- |
 | **Antigravity CLI** | `agy` | `~/.gemini/antigravity-cli/brain/` transcripts & logs |
-| **Claude Code** | `claude` | `~/.claude.json` projects & `~/.claude/projects/` |
-| **ChatGPT Codex** | `codex` | `~/.codex/` session store & project history |
+| **Claude Code** | `claude` | `~/.claude/projects/<project>/<session-id>.jsonl` transcripts |
+| **ChatGPT Codex** | `codex` | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`) |
 | **Cline** | `cline` | `~/.cline/data/sessions/` session metadata & messages |
 | **OpenCode** | `opencode` | Local OpenCode session API (`opencode api session.list`) |
 | **OpenClaw** | `openclaw` | `openclaw sessions --json` session store & `openclaw resume <key>` |
@@ -282,7 +282,7 @@ typedef struct terminal_adapter {
     const char *display_name;
     const char *os;
     bool (*is_available)(void);
-    int (*launch_session)(const session_t *session, bool dry_run);
+    int (*launch_session)(const session_t *session, bool dry_run, bool open_in_tabs);
 } terminal_adapter_t;
 ```
 

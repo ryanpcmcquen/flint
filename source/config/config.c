@@ -165,6 +165,9 @@ static const char *tool_name_for_section(const char *section) {
     if (strcasecmp(section, "opencode") == 0 || strcasecmp(section, "open-code") == 0) {
         return "opencode";
     }
+    if (strcasecmp(section, "openclaw") == 0 || strcasecmp(section, "open-claw") == 0) {
+        return "openclaw";
+    }
     return NULL;
 }
 

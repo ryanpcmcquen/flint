@@ -97,6 +97,8 @@ static void test_jsonl_scanning(void) {
     PASS();
 }
 
+static void write_test_file(const char *path, const char *content);
+
 static void test_path_utils(void) {
     TEST("fs_path_join");
     char out[MAX_PATH_LEN];
@@ -119,6 +121,26 @@ static void test_path_utils(void) {
     assert(str_contains_ignore_case("Ghostty Terminal", "ghostty"));
     assert(str_contains_ignore_case("iTerm2", "ITERM"));
     assert(!str_contains_ignore_case("kitty", "alacritty"));
+    PASS();
+
+    TEST("str_collapse_whitespace");
+    char spaced[64];
+    strncpy(spaced, "  Fix the\n\tparser   please  ", sizeof(spaced));
+    str_collapse_whitespace(spaced);
+    assert(strcmp(spaced, "Fix the parser please") == 0);
+    PASS();
+
+    TEST("fs_read_head reads a bounded prefix");
+    char head_path[MAX_PATH_LEN];
+    snprintf(head_path, sizeof(head_path), "/tmp/flint_test_head_%d", (int)getpid());
+    write_test_file(head_path, "0123456789");
+    size_t head_size = 0;
+    char *head = fs_read_head(head_path, 4, &head_size);
+    assert(head != NULL);
+    assert(head_size == 4);
+    assert(strcmp(head, "0123") == 0);
+    free(head);
+    remove(head_path);
     PASS();
 }
 
@@ -360,6 +382,28 @@ static void test_config_file_parsing(void) {
     remove(path);
     PASS();
 
+    TEST("config file parsing: [openclaw] section");
+    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    f = fopen(path, "w");
+    assert(f);
+    fprintf(f, "[openclaw]\n");
+    fprintf(f, "wrapper = wrapclaw\n");
+    fprintf(f, "model = claw-model\n");
+    fprintf(f, "effort = high\n");
+    fclose(f);
+
+    flint_config_t cfg5;
+    config_init_defaults(&cfg5);
+    assert(config_load(path, &cfg5));
+    tc = config_find_tool(&cfg5, "openclaw");
+    assert(tc != NULL);
+    assert(strcmp(tc->wrapper, "wrapclaw") == 0);
+    assert(strcmp(tc->model, "claw-model") == 0);
+    assert(strcmp(tc->effort, "high") == 0);
+    config_destroy(&cfg5);
+    remove(path);
+    PASS();
+
     TEST("config file parsing: mcp_focus");
     snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
     f = fopen(path, "w");
@@ -495,6 +539,212 @@ static void test_antigravity_transcript_parsing(void) {
     PASS();
 }
 
+static void test_ai_head_parsers(void) {
+    TEST("claude head parse: session, cwd, first prompt");
+    const char *claude_jsonl =
+        "{\"type\":\"summary\",\"summary\":\"Generated fallback title\"}\n"
+        "{\"parentUuid\":null,\"isSidechain\":false,\"cwd\":\"/tmp/claude-work\","
+        "\"sessionId\":\"11111111-1111-4111-8111-111111111111\",\"type\":\"user\","
+        "\"message\":{\"role\":\"user\",\"content\":[{\"type\":\"text\","
+        "\"text\":\"Fix the JSON parser\\nplease\"}]},"
+        "\"timestamp\":\"2026-11-04T12:00:00Z\"}\n";
+    claude_head_t claude;
+    assert(flint_claude_parse_head(claude_jsonl, &claude));
+    assert(strcmp(claude.session_id, "11111111-1111-4111-8111-111111111111") == 0);
+    assert(strcmp(claude.workspace, "/tmp/claude-work") == 0);
+    assert(strcmp(claude.summary, "Fix the JSON parser please") == 0);
+    assert(claude.is_sidechain == false);
+    PASS();
+
+    TEST("claude head parse: custom title and sidechain");
+    const char *claude_title =
+        "{\"isSidechain\":true,\"cwd\":\"/tmp/agent-work\","
+        "\"sessionId\":\"33333333-3333-4333-8333-333333333333\",\"type\":\"user\","
+        "\"message\":{\"role\":\"user\",\"content\":\"Subagent prompt\"}}\n"
+        "{\"type\":\"custom-title\",\"customTitle\":\"Named Claude Session\"}\n";
+    claude_head_t titled;
+    assert(flint_claude_parse_head(claude_title, &titled));
+    assert(titled.is_sidechain == true);
+    assert(strcmp(titled.summary, "Named Claude Session") == 0);
+    PASS();
+
+    TEST("claude head parse: malformed input is rejected");
+    claude_head_t bad_claude;
+    assert(flint_claude_parse_head("not json at all", &bad_claude) == false);
+    PASS();
+
+    TEST("codex head parse: session_meta + user_message");
+    const char *codex_jsonl =
+        "{\"timestamp\":\"2026-11-04T12:00:00Z\",\"type\":\"session_meta\","
+        "\"payload\":{\"id\":\"22222222-2222-4222-8222-222222222222\","
+        "\"session_id\":\"22222222-2222-4222-8222-222222222222\","
+        "\"timestamp\":\"2026-11-04T12:00:00Z\",\"cwd\":\"/tmp/codex-work\","
+        "\"originator\":\"codex_cli_rs\",\"cli_version\":\"1.0\","
+        "\"git\":{\"branch\":\"main\"}}}\n"
+        "{\"timestamp\":\"2026-11-04T12:00:01Z\",\"type\":\"event_msg\","
+        "\"payload\":{\"type\":\"user_message\",\"message\":\"Add real Codex discovery\","
+        "\"images\":[]}}\n";
+    codex_head_t codex;
+    assert(flint_codex_parse_head(codex_jsonl, &codex));
+    assert(strcmp(codex.session_id, "22222222-2222-4222-8222-222222222222") == 0);
+    assert(strcmp(codex.workspace, "/tmp/codex-work") == 0);
+    assert(strcmp(codex.summary, "Add real Codex discovery") == 0);
+    assert(strcmp(codex.git_branch, "main") == 0);
+    assert(codex.is_agent == false);
+    PASS();
+
+    TEST("codex head parse: response_item user message");
+    const char *codex_response =
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"44444444-4444-4444-8444-444444444444\","
+        "\"cwd\":\"/tmp/codex-response\"}}\n"
+        "{\"type\":\"response_item\",\"payload\":{\"type\":\"message\",\"role\":\"user\","
+        "\"content\":[{\"type\":\"input_text\",\"text\":\"New format prompt\"}]}}\n";
+    codex_head_t response;
+    assert(flint_codex_parse_head(codex_response, &response));
+    assert(strcmp(response.summary, "New format prompt") == 0);
+    PASS();
+
+    TEST("codex head parse: subagent metadata");
+    const char *codex_agent =
+        "{\"type\":\"session_meta\",\"payload\":{\"id\":\"55555555-5555-4555-8555-555555555555\","
+        "\"cwd\":\"/tmp/codex-agent\",\"parent_thread_id\":\"66666666-6666-4666-8666-666666666666\","
+        "\"agent_role\":\"explorer\"}}\n";
+    codex_head_t agent;
+    assert(flint_codex_parse_head(codex_agent, &agent));
+    assert(agent.is_agent == true);
+    PASS();
+
+    TEST("codex head parse: malformed input is rejected");
+    codex_head_t bad_codex;
+    assert(flint_codex_parse_head("{broken", &bad_codex) == false);
+    PASS();
+}
+
+static void write_test_file(const char *path, const char *content) {
+    FILE *f = fopen(path, "w");
+    assert(f);
+    fputs(content, f);
+    fclose(f);
+}
+
+static const ai_adapter_t *find_test_adapter(const char *binary) {
+    const ai_adapter_t **adapters = NULL;
+    size_t adapter_count = ai_get_adapters(&adapters);
+    for (size_t i = 0; i < adapter_count; i++) {
+        if (adapters[i]->cli_binary && strcmp(adapters[i]->cli_binary, binary) == 0) {
+            return adapters[i];
+        }
+    }
+    return NULL;
+}
+
+static void test_claude_codex_discovery(void) {
+    TEST("claude discovery from ~/.claude/projects");
+    char old_home[MAX_PATH_LEN] = {0};
+    char old_codex_home[MAX_PATH_LEN] = {0};
+    const char *home_env = getenv("HOME");
+    const char *codex_env = getenv("CODEX_HOME");
+    if (home_env) strncpy(old_home, home_env, sizeof(old_home) - 1);
+    if (codex_env) strncpy(old_codex_home, codex_env, sizeof(old_codex_home) - 1);
+
+    char root[MAX_PATH_LEN];
+    char home[MAX_PATH_LEN];
+    char claude_projects[MAX_PATH_LEN];
+    char claude_project[MAX_PATH_LEN];
+    char claude_file[MAX_PATH_LEN];
+    char claude_workspace[MAX_PATH_LEN];
+    snprintf(root, sizeof(root), "/tmp/flint_ai_test_%d", (int)getpid());
+    snprintf(home, sizeof(home), "%s/home", root);
+    snprintf(claude_projects, sizeof(claude_projects), "%s/.claude/projects", home);
+    snprintf(claude_project, sizeof(claude_project), "%s/-tmp-claude-project", claude_projects);
+    snprintf(claude_file, sizeof(claude_file), "%s/11111111-1111-4111-8111-111111111111.jsonl",
+             claude_project);
+    snprintf(claude_workspace, sizeof(claude_workspace), "%s/claude-workspace", root);
+
+    assert(fs_mkdir_p(claude_project) == 0);
+    assert(fs_mkdir_p(claude_workspace) == 0);
+    char claude_fixture[2048];
+    snprintf(claude_fixture, sizeof(claude_fixture),
+             "{\"isSidechain\":false,\"cwd\":\"%s\","
+             "\"sessionId\":\"11111111-1111-4111-8111-111111111111\",\"type\":\"user\","
+             "\"message\":{\"role\":\"user\",\"content\":\"Fix the JSON parser\"}}\n",
+             claude_workspace);
+    write_test_file(claude_file, claude_fixture);
+
+    setenv("HOME", home, 1);
+
+    const ai_adapter_t *claude = find_test_adapter("claude");
+    assert(claude != NULL);
+    flint_config_t cfg;
+    config_init_defaults(&cfg);
+    session_list_t list;
+    session_list_init(&list);
+    assert(claude->discover_sessions(&cfg, 24, &list) == 0);
+    assert(list.count == 1);
+    assert(strcmp(list.items[0].id, "11111111-1111-4111-8111-111111111111") == 0);
+    assert(strcmp(list.items[0].workspace, claude_workspace) == 0);
+    assert(strcmp(list.items[0].summary, "Fix the JSON parser") == 0);
+    assert(strstr(list.items[0].resume_cmd, "claude --resume 11111111-1111-4111-8111-111111111111") != NULL);
+    session_list_free(&list);
+    config_destroy(&cfg);
+    PASS();
+
+    TEST("codex discovery from $CODEX_HOME/sessions");
+    char codex_home[MAX_PATH_LEN];
+    char codex_day[MAX_PATH_LEN];
+    char codex_file[MAX_PATH_LEN];
+    char codex_workspace[MAX_PATH_LEN];
+    snprintf(codex_home, sizeof(codex_home), "%s/.codex", home);
+    snprintf(codex_day, sizeof(codex_day), "%s/sessions/2026/11/04", codex_home);
+    snprintf(codex_file, sizeof(codex_file),
+             "%s/rollout-2026-11-04T12-00-00-22222222-2222-4222-8222-222222222222.jsonl",
+             codex_day);
+    snprintf(codex_workspace, sizeof(codex_workspace), "%s/codex-workspace", root);
+
+    assert(fs_mkdir_p(codex_day) == 0);
+    assert(fs_mkdir_p(codex_workspace) == 0);
+    char codex_fixture[2048];
+    snprintf(codex_fixture, sizeof(codex_fixture),
+             "{\"timestamp\":\"2026-11-04T12:00:00Z\",\"type\":\"session_meta\","
+             "\"payload\":{\"id\":\"22222222-2222-4222-8222-222222222222\","
+             "\"cwd\":\"%s\",\"git\":{\"branch\":\"main\"}}}\n"
+             "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\","
+             "\"message\":\"Add real Codex discovery\"}}\n",
+             codex_workspace);
+    write_test_file(codex_file, codex_fixture);
+    setenv("CODEX_HOME", codex_home, 1);
+
+    const ai_adapter_t *codex = find_test_adapter("codex");
+    assert(codex != NULL);
+    flint_config_t codex_cfg;
+    config_init_defaults(&codex_cfg);
+    session_list_t codex_list;
+    session_list_init(&codex_list);
+    assert(codex->discover_sessions(&codex_cfg, 24, &codex_list) == 0);
+    assert(codex_list.count == 1);
+    assert(strcmp(codex_list.items[0].id, "22222222-2222-4222-8222-222222222222") == 0);
+    assert(strcmp(codex_list.items[0].workspace, codex_workspace) == 0);
+    assert(strcmp(codex_list.items[0].summary, "Add real Codex discovery") == 0);
+    assert(strstr(codex_list.items[0].resume_cmd, "codex resume 22222222-2222-4222-8222-222222222222") != NULL);
+    session_list_free(&codex_list);
+    config_destroy(&codex_cfg);
+
+    unsetenv("CODEX_HOME");
+    if (old_codex_home[0] != '\0') {
+        setenv("CODEX_HOME", old_codex_home, 1);
+    }
+    if (old_home[0] != '\0') {
+        setenv("HOME", old_home, 1);
+    } else {
+        unsetenv("HOME");
+    }
+
+    char cleanup[MAX_PATH_LEN + 32];
+    snprintf(cleanup, sizeof(cleanup), "rm -rf '%s'", root);
+    assert(system(cleanup) == 0);
+    PASS();
+}
+
 static void test_openclaw_discovery(void) {
     TEST("openclaw adapter discovery via openclaw sessions");
     const ai_adapter_t **adapters = NULL;
@@ -543,7 +793,7 @@ static void test_mcp_focus_internals(void) {
     TEST("mcp_query_prompt rejects unusable inputs");
     char out2[512] = {0};
     assert(mcp_query_prompt("/tmp/ws", "ctx", NULL, NULL, out2, sizeof(out2), NULL) == false);
-    assert(mcp_query_prompt("/tmp/ws", "ctx", "instructions", "instructions", out2, sizeof(out2), NULL) == false);
+    assert(mcp_query_prompt("/tmp/ws", "ctx", NULL, "instructions", out2, 0, NULL) == false);
     assert(mcp_query_prompt(NULL, "ctx", "instructions", "instructions", out2, sizeof(out2), NULL) == false);
     PASS();
 
@@ -687,6 +937,8 @@ int main(void) {
     test_json_unescape();
     test_jsonl_scanning();
     test_antigravity_transcript_parsing();
+    test_ai_head_parsers();
+    test_claude_codex_discovery();
     test_openclaw_discovery();
     test_path_utils();
     test_session_deduplication();
