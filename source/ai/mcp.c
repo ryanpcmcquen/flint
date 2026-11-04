@@ -195,12 +195,6 @@ bool mcp_detect_connected(const session_list_t *list, mcp_target_t *out) {
     return false;
 }
 
-typedef struct {
-    char text[8192];
-    size_t len;
-    char session_id[MAX_NAME_LEN];
-} mcp_run_t;
-
 static int mcp_collect_line(const char *line, size_t len, size_t line_num, void *userdata) {
     (void)line_num;
     mcp_run_t *ctx = (mcp_run_t *)userdata;
@@ -249,6 +243,12 @@ static int mcp_collect_line(const char *line, size_t len, size_t line_num, void 
     free(buf);
     return 0;
 }
+
+#ifdef TEST_MODE
+int flint_mcp_collect_line(const char *line, size_t len, void *ctx) {
+    return mcp_collect_line(line, len, 0, ctx);
+}
+#endif
 
 static void mcp_remove_session(const char *session_id) {
     if (!session_id || session_id[0] == '\0') return;
