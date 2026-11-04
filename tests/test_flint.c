@@ -516,6 +516,28 @@ static void test_brief_and_mcp(void) {
     assert(strcmp(brief2.focus[0].workspace, "slack") == 0);
     assert(strcmp(brief2.focus[1].text, "Finish the README changes") == 0);
     PASS();
+
+    TEST("brief_add_scribe_focus merges Scribe bullets and deduplicates workspaces");
+    brief_t brief3;
+    memset(&brief3, 0, sizeof(brief3));
+    strncpy(brief3.focus[0].workspace, "/tmp/flint", sizeof(brief3.focus[0].workspace) - 1);
+    strncpy(brief3.focus[0].text, "Finish uncommitted changes", sizeof(brief3.focus[0].text) - 1);
+    brief3.focus_count = 1;
+
+    bool scribe_added = brief_add_scribe_focus(
+        &brief3,
+        "- reminder: [Reminder P1] Rotate API keys\n"
+        "- flint: Duplicate workspace should skip\n"
+        "- scribe: Split storage by month\n",
+        5
+    );
+    assert(scribe_added);
+    assert(brief3.focus_count == 3);
+    assert(strcmp(brief3.focus[1].workspace, "reminder") == 0);
+    assert(strcmp(brief3.focus[1].text, "[Reminder P1] Rotate API keys") == 0);
+    assert(strcmp(brief3.focus[2].workspace, "scribe") == 0);
+    assert(strcmp(brief3.focus[2].text, "Split storage by month") == 0);
+    PASS();
 }
 
 

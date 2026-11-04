@@ -372,6 +372,7 @@ int main(int argc, char **argv) {
     if (all_sessions.count > 0) {
         brief_t brief;
         brief_build(&all_sessions, &brief);
+        brief_collect_scribe_focus(&brief, sizeof(brief.focus) / sizeof(brief.focus[0]));
         brief_print_overview(&all_sessions, cfg.lookback_hours);
         brief_print_focus(&brief);
 

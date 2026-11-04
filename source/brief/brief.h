@@ -32,4 +32,12 @@ void brief_focus_context(const brief_t *brief, char *out, size_t out_size);
 bool brief_add_mcp_focus(brief_t *brief, const char *text, size_t max_items,
                         const char *workspace);
 
+/* Parse `- <workspace>: <text>` bullets emitted by `scribe focus --bullets`
+ * into the brief focus list. Returns true if any new items were added. */
+bool brief_add_scribe_focus(brief_t *brief, const char *text, size_t max_items);
+
+/* If `scribe` is installed on PATH, query `scribe focus --bullets` and merge
+ * its output into the brief focus list. */
+bool brief_collect_scribe_focus(brief_t *brief, size_t max_items);
+
 #endif /* FLINT_BRIEF_H */
