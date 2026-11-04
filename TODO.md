@@ -55,5 +55,5 @@ Status reviewed against the code on 2026-11-04. `make` builds cleanly and `make 
     - Half-wired remnant: `flint_config_t.open_in_tabs` is parsed, written to the config template, and documented, but never consumed by resume/launch logic.
     - No debug leftovers (DEBUG/FIXME/XXX/HACK) found in source.
     - No duplicated logic introduced by the merge resolution (fs_mkdir_p conflict resolved to single `int` version).
-- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing now covered via `flint_agy_parse_line` regression tests; OpenClaw discovery covered via adapter-level test; suite 40/40) remain; `proc` and `resume_mode` filtering are covered. Claude/Codex discovery + resume e2e still need real installs.
+- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing via `flint_agy_parse_line` regression tests; OpenClaw discovery via adapter-level test; MCP focus/query + `mcp_collect_line` internals via new tests) are covered — suite now **45/45**. `proc` and `resume_mode` filtering are covered. Claude/Codex discovery + resume e2e still need real installs.
 - [x] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Committed this TODO.md.

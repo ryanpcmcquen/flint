@@ -481,6 +481,57 @@ static void test_openclaw_discovery(void) {
     PASS();
 }
 
+static void test_mcp_focus_internals(void) {
+    TEST("mcp_query_focus rejects unusable inputs");
+    flint_config_t cfg;
+    config_init_defaults(&cfg);
+    mcp_target_t target;
+    memset(&target, 0, sizeof(target));
+    char out[512] = {0};
+
+    assert(mcp_query_focus(NULL, &target, "ctx", out, sizeof(out)) == false);
+    assert(mcp_query_focus(&cfg, NULL, "ctx", out, sizeof(out)) == false);
+    cfg.mcp_focus = false;
+    assert(mcp_query_focus(&cfg, &target, "ctx", out, sizeof(out)) == false);
+    cfg.mcp_focus = true;
+    assert(mcp_query_focus(&cfg, &target, "ctx", out, sizeof(out)) == false);
+    config_destroy(&cfg);
+    PASS();
+
+    TEST("mcp_query_prompt rejects unusable inputs");
+    char out2[512] = {0};
+    assert(mcp_query_prompt("/tmp/ws", "ctx", NULL, NULL, out2, sizeof(out2), NULL) == false);
+    assert(mcp_query_prompt("/tmp/ws", "ctx", "instructions", "instructions", out2, sizeof(out2), NULL) == false);
+    assert(mcp_query_prompt(NULL, "ctx", "instructions", "instructions", out2, sizeof(out2), NULL) == false);
+    PASS();
+
+    TEST("mcp_collect_line accumulates text and session id");
+    mcp_run_t run;
+    memset(&run, 0, sizeof(run));
+    const char *line1 = "{\"type\":\"text\",\"part\":{\"type\":\"text\",\"text\":\"- First priority\"}}";
+    flint_mcp_collect_line(line1, (int)strlen(line1), &run);
+    assert(run.text[0] != '\0');
+    assert(strstr(run.text, "First priority") != NULL);
+    PASS();
+
+    TEST("mcp_collect_line accumulates multiple text lines");
+    mcp_run_t run2;
+    memset(&run2, 0, sizeof(run2));
+    const char *line2 = "{\"type\":\"text\",\"sessionID\":\"ses_test123\",\"part\":{\"type\":\"text\",\"text\":\"- Second priority\"}}";
+    flint_mcp_collect_line(line2, (int)strlen(line2), &run2);
+    assert(run2.session_id[0] != '\0');
+    assert(strstr(run2.text, "Second priority") != NULL);
+    PASS();
+
+    TEST("mcp_collect_line ignores non-text lines");
+    mcp_run_t run3;
+    memset(&run3, 0, sizeof(run3));
+    const char *line3 = "{\"type\":\"agent_message\",\"part\":{\"type\":\"text\",\"text\":\"- Ignored\"}}";
+    flint_mcp_collect_line(line3, (int)strlen(line3), &run3);
+    assert(run3.text[0] == '\0');
+    PASS();
+}
+
 static void test_resume_mode_filter(void) {
     TEST("resume_mode filter: user sessions only");
     session_t s;
@@ -601,6 +652,7 @@ int main(void) {
     test_config_and_wrappers();
     test_config_file_parsing();
     test_brief_and_mcp();
+    test_mcp_focus_internals();
     test_git_inspection();
     test_journal_generation();
     test_proc_running();
