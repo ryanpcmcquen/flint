@@ -10,6 +10,13 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
   - Claude and Codex: neither CLI is installed on this machine, so I couldn't check their flags. Look up the real resume syntax before wiring them up. From memory, and unverified, Claude has `--resume`/`--continue` and Codex has a `resume` subcommand. Resume commands were wired anyway (`claude --resume <id>`, `codex resume <id>`) with tests added; flags still need real-CLI verification.
   - Claude and Codex session IDs aren't real session IDs yet. `claude.c` uses the project directory name or the placeholder `"claude-session"`. `codex.c` uses the top-level entry name in `~/.codex`. Both need real discovery of session files (e.g. the `.jsonl` file names) before an ID-based resume can work.
   - Add a test for the resume command string. DONE: added `config_format_tool_cmd resumes Antigravity sessions via --conversation`, `... resumes OpenCode sessions`, `... resumes Claude sessions via --resume`, and `... resumes Codex sessions via resume subcommand` tests in `tests/test_flint.c`; `make test` now passes 28/28. End-to-end resume still needs real CLI installs.
+  - **RESUME E2E DONE THIS ROUND (2026-11-04):** real CLIs now installed & exercised — `agy`, `cline`, `opencode`, and newly-discovered `openclaw`. `flint -r -n` (resume + dry-run) now walks the full pipeline: discovery → `resume_mode` filter → not-running check → `config_format_tool_cmd` → terminal launch dry-run. All installed tools produce correct resume commands:
+    - `agy --conversation <ID> --model gemini-3.8-flash --effort high`
+    - `cline --id <ID>`
+    - `opencode --session <ID>`
+    - `openclaw resume agent:main:main` (new OpenClaw adapter: discovery via `openclaw sessions --json`, resume via `openclaw resume <key>`)
+    - `claude` / `codex`: still missing installs (flags unverified).
+  - Added OpenClaw adapter (`source/ai/openclaw.c`, registered in the adapter registry) + `config_format_tool_cmd resumes OpenClaw sessions via resume` test; suite now **39/39**.
 - [x] **Make the inclusion of GrapeRoot configurable.** DONE.
   - Generalized into a full tool list: `flint_config_t` now holds an ordered `tool_configs` list instead of three fixed per-tool structs (`source/flint.h`). `config_add_tool()` / `config_find_tool()` manage it.
   - Config file sections `[agy]`, `[claude]`, `[codex]` (aliases `[antigravity]`, `[openai]` accepted) set `wrapper`, `model` and `effort`.

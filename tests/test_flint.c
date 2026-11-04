@@ -276,6 +276,15 @@ static void test_config_and_wrappers(void) {
     assert(strstr(cmd8, "--model o3-mini") != NULL);
     config_destroy(&cfg9);
     PASS();
+
+    TEST("config_format_tool_cmd resumes OpenClaw sessions via resume");
+    flint_config_t cfg10;
+    config_init_defaults(&cfg10);
+    char cmd9[512] = {0};
+    config_format_tool_cmd(&cfg10, "openclaw", "agent:main:main", cmd9, sizeof(cmd9));
+    assert(strstr(cmd9, "openclaw resume agent:main:main") != NULL);
+    config_destroy(&cfg10);
+    PASS();
 }
 
 static void test_config_file_parsing(void) {

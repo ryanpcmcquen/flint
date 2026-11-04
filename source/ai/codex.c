@@ -84,7 +84,8 @@ static const ai_adapter_t *all_adapters[] = {
     &claude_adapter,
     &codex_adapter,
     &cline_adapter,
-    &opencode_adapter
+    &opencode_adapter,
+    &openclaw_adapter
 };
 
 size_t ai_get_adapters(const ai_adapter_t ***adapters) {
