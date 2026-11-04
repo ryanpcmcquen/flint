@@ -453,6 +453,34 @@ static void test_antigravity_transcript_parsing(void) {
     PASS();
 }
 
+static void test_openclaw_discovery(void) {
+    TEST("openclaw adapter discovery via openclaw sessions");
+    const ai_adapter_t **adapters = NULL;
+    size_t adapter_count = ai_get_adapters(&adapters);
+    int found_openclaw = 0;
+    for (size_t i = 0; i < adapter_count; i++) {
+        if (adapters[i]->cli_binary && strcmp(adapters[i]->cli_binary, "openclaw") == 0) {
+            found_openclaw = 1;
+            flint_config_t cfg;
+            config_init_defaults(&cfg);
+            session_list_t list;
+            session_list_init(&list);
+            int res = adapters[i]->discover_sessions(&cfg, 24 * 7, &list);
+            assert(res == 0);
+            printf("       (discovered %zu openclaw session(s))\n", list.count);
+            assert(list.count > 0);
+            for (size_t s = 0; s < list.count; s++) {
+                assert(strstr(list.items[s].resume_cmd, "openclaw resume") != NULL);
+            }
+            session_list_free(&list);
+            config_destroy(&cfg);
+            break;
+        }
+    }
+    assert(found_openclaw);
+    PASS();
+}
+
 static void test_resume_mode_filter(void) {
     TEST("resume_mode filter: user sessions only");
     session_t s;
@@ -566,6 +594,7 @@ int main(void) {
     test_json_unescape();
     test_jsonl_scanning();
     test_antigravity_transcript_parsing();
+    test_openclaw_discovery();
     test_path_utils();
     test_session_deduplication();
     test_terminal_registry();
