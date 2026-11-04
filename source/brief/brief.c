@@ -1,4 +1,5 @@
 #include "brief.h"
+#include "../util/exec.h"
 #include "../util/fs.h"
 #include <string.h>
 #include <ctype.h>
@@ -382,5 +383,87 @@ bool brief_add_mcp_focus(brief_t *brief, const char *text, size_t max_items,
         }
     }
 
+    return added;
+}
+
+bool brief_add_scribe_focus(brief_t *brief, const char *text, size_t max_items) {
+    if (!brief || !text) return false;
+
+    bool added = false;
+    const char *p = text;
+    while (*p && brief->focus_count < max_items) {
+        while (*p == '\n' || *p == '\r' || *p == ' ' || *p == '\t') p++;
+        if (*p == '\0') break;
+
+        const char *start = p;
+        while (*p && *p != '\n' && *p != '\r') p++;
+
+        char line[MAX_SUMMARY_LEN];
+        size_t len = (size_t)(p - start);
+        if (len >= sizeof(line)) len = sizeof(line) - 1;
+        memcpy(line, start, len);
+        line[len] = '\0';
+        str_trim(line);
+
+        if (line[0] != '-' || line[1] != ' ') continue;
+
+        char *body = line + 2;
+        str_trim(body);
+        if (body[0] == '\0') continue;
+
+        char ws[MAX_PATH_LEN] = "scribe";
+        char summary[MAX_SUMMARY_LEN] = {0};
+
+        char *colon = strstr(body, ": ");
+        if (colon && colon > body && (size_t)(colon - body) < sizeof(ws)) {
+            size_t ws_len = (size_t)(colon - body);
+            memcpy(ws, body, ws_len);
+            ws[ws_len] = '\0';
+            str_trim(ws);
+            snprintf(summary, sizeof(summary), "%s", colon + 2);
+            str_trim(summary);
+        } else {
+            snprintf(summary, sizeof(summary), "%s", body);
+        }
+
+        if (summary[0] == '\0') continue;
+
+        bool duplicate = false;
+        for (size_t i = 0; i < brief->focus_count; i++) {
+            char existing_label[MAX_PATH_LEN];
+            workspace_label(brief->focus[i].workspace, existing_label, sizeof(existing_label));
+            if (strcasecmp(brief->focus[i].text, summary) == 0) {
+                duplicate = true;
+                break;
+            }
+            if (strcasecmp(ws, "reminder") != 0 &&
+                strcasecmp(existing_label, ws) == 0) {
+                duplicate = true;
+                break;
+            }
+        }
+
+        if (!duplicate) {
+            focus_item_t *item = &brief->focus[brief->focus_count];
+            strncpy(item->workspace, ws, sizeof(item->workspace) - 1);
+            item->workspace[sizeof(item->workspace) - 1] = '\0';
+            str_truncate_clean(item->text, summary, sizeof(item->text) - 1);
+            brief->focus_count++;
+            added = true;
+        }
+    }
+
+    return added;
+}
+
+bool brief_collect_scribe_focus(brief_t *brief, size_t max_items) {
+    if (!brief || brief->focus_count >= max_items) return false;
+    if (!exec_command_exists("scribe")) return false;
+
+    char *out = exec_capture("scribe focus --bullets --limit 5 2>/dev/null");
+    if (!out) return false;
+
+    bool added = brief_add_scribe_focus(brief, out, max_items);
+    free(out);
     return added;
 }
