@@ -1049,8 +1049,9 @@ static void test_journal_generation(void) {
     session_t s;
     memset(&s, 0, sizeof(s));
     strncpy(s.tool_name, "Claude Code", sizeof(s.tool_name) - 1);
-    strncpy(s.workspace, "/tmp/flint_ws_test", sizeof(s.workspace) - 1);
-    strncpy(s.summary, "Did a thing", sizeof(s.summary) - 1);
+    fs_expand_path("~/code/flint_ws_test", s.workspace, sizeof(s.workspace));
+    fs_expand_path("Worked inside ~/code/flint_ws_test today", s.summary, sizeof(s.summary));
+    strncpy(s.resume_cmd, "claude --resume abc", sizeof(s.resume_cmd) - 1);
     s.origin = SESSION_ORIGIN_USER;
     session_list_add(&list, &s);
 
@@ -1066,8 +1067,36 @@ static void test_journal_generation(void) {
     char path[MAX_PATH_LEN];
     fs_path_join(daily_dir, date_file, path, sizeof(path));
     assert(fs_file_exists(path));
+    char *daily_content = fs_read_file(path, NULL);
+    assert(daily_content != NULL);
+    assert(strstr(daily_content, "### [Claude Code] `~/code/flint_ws_test`") != NULL);
+    assert(strstr(daily_content, "`claude --resume abc` in `~/code/flint_ws_test`") != NULL);
+    const char *env_home = getenv("HOME");
+    if (env_home && env_home[0] != '\0') {
+        assert(strstr(daily_content, env_home) == NULL);
+    }
+    free(daily_content);
 
     session_list_free(&list);
+    PASS();
+
+    TEST("fs_tildify_path and fs_redact_home_paths collapse home prefix");
+    char expanded_home[MAX_PATH_LEN];
+    fs_expand_path("~", expanded_home, sizeof(expanded_home));
+    char tildified[MAX_PATH_LEN];
+    fs_tildify_path(expanded_home, tildified, sizeof(tildified));
+    assert(strcmp(tildified, "~") == 0);
+
+    char sub_expanded[MAX_PATH_LEN];
+    fs_expand_path("~/notes/flint-journal", sub_expanded, sizeof(sub_expanded));
+    fs_tildify_path(sub_expanded, tildified, sizeof(tildified));
+    assert(strcmp(tildified, "~/notes/flint-journal") == 0);
+
+    char raw_sentence[MAX_SUMMARY_LEN];
+    char redacted_sentence[MAX_SUMMARY_LEN];
+    snprintf(raw_sentence, sizeof(raw_sentence), "Checked %s/code/flint and %s.", expanded_home, expanded_home);
+    fs_redact_home_paths(raw_sentence, redacted_sentence, sizeof(redacted_sentence));
+    assert(strcmp(redacted_sentence, "Checked ~/code/flint and ~.") == 0);
     PASS();
 
     TEST("journal_generate_weekly writes weekly summary");

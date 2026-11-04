@@ -17,6 +17,12 @@
 /* Expand paths beginning with '~' or relative to user home */
 void fs_expand_path(const char *path, char *out, size_t out_size);
 
+/* Collapse a leading user home directory prefix to '~' / '~/...' */
+void fs_tildify_path(const char *path, char *out, size_t out_size);
+
+/* Replace occurrences of the user's home directory path in arbitrary text with '~' */
+void fs_redact_home_paths(const char *src, char *out, size_t out_size);
+
 /* Check if file or directory exists */
 bool fs_file_exists(const char *path);
 bool fs_dir_exists(const char *path);
