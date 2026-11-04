@@ -377,9 +377,9 @@ int main(int argc, char **argv) {
 
         if (cfg.mcp_focus) {
             mcp_target_t target;
-            if (mcp_detect_connected(&all_sessions, &target)) {
-                printf(ANSI_DIM "  Consulting connected tools (%s) for today's priorities...\n" ANSI_RESET,
-                       target.servers);
+            if (mcp_detect_connected(&cfg, &all_sessions, &target)) {
+                printf(ANSI_DIM "  Consulting connected tools via %s (%s) for today's priorities...\n" ANSI_RESET,
+                       target.host_name, target.servers);
                 fflush(stdout);
 
                 char context[16384];

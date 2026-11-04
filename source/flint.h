@@ -89,6 +89,7 @@ typedef struct {
     bool open_in_tabs;
     bool auto_journal;
     bool mcp_focus;                     /* Query connected MCP tools for today's focus */
+    char mcp_host[MAX_NAME_LEN];        /* Preferred MCP host: auto (blank), agy, claude, cline, codex, opencode, openclaw */
 
     /* Ordered list of tool configurations. Each AI CLI adapter owns one
      * entry; anything not listed gets no wrapper by default. */
