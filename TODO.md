@@ -23,6 +23,7 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
     - ~~`proc_is_session_running()` runs `ps -eo pid,command` once per session, plus an `lsof` per matching process.~~ DONE: ps output is now cached for the process lifetime; `lsof` cwd lookups are now cached per pid (`proc_lsof_cwd`).
     - ~~`git_inspect_workspace()` spawns 3 `git` subprocesses per session (`rev-parse`, `status`, `log`).~~ DONE: replaced `rev-parse` + `status` with a single `git status --porcelain -b`; only `git log` remains per session.
     - ~~`parse_transcript_line()` in `antigravity.c` mallocs and copies every line.~~ DONE: now reuses a scratch buffer in `agy_scan_ctx_t` instead of malloc/free per line.
+    - **BUG FOUND & FIXED (2026-11-03):** the scratch-buffer refactor left a stale `free(buf)` behind, so the callback freed a stack buffer (`agy_scan_ctx_t.line_buf`) → glibc abort: `malloc: *** error for object ...: pointer being freed was not allocated` → SIGABRT on `./flint --summary`. **Fixed**: removed the stale `free`; added regression tests feeding real transcript lines through the parser (`make test` → 38/38).
     - `session_list_add()` dedupes with a linear scan. This is fine for small lists.
   - Profile with a realistic number of sessions before optimizing.
 - [x] **Make the amount of hours to check for active sessions configurable.** DONE.
@@ -47,5 +48,5 @@ Status reviewed against the code on 2026-11-02. `make` builds cleanly and `make 
     - Half-wired remnant: `flint_config_t.open_in_tabs` is parsed, written to the config template, and documented, but never consumed by resume/launch logic.
     - No debug leftovers (DEBUG/FIXME/XXX/HACK) found in source.
     - No duplicated logic introduced by the merge resolution (fs_mkdir_p conflict resolved to single `int` version).
-- [ ] Test coverage is thin. Nothing covers the AI adapters yet; `resume_mode` filtering now has unit tests via the extracted `resume_session_should_include()` helper (now covered, suite 35/32→35/35).
+- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing now covered via `flint_agy_parse_line` regression tests; suite 38/38) remain; `proc` and `resume_mode` filtering are covered. Claude/Codex discovery + resume e2e still need real installs.
 - [x] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Committed this TODO.md.
