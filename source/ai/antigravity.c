@@ -13,18 +13,6 @@
   #include <unistd.h>
 #endif
 
-typedef struct {
-    char session_id[MAX_NAME_LEN];
-    char workspace[MAX_PATH_LEN];
-    char last_user_req[MAX_SUMMARY_LEN];
-    char accomplishments[MAX_SUMMARY_LEN];
-    time_t last_time;
-    int prompt_count;
-    session_origin_t origin;
-    /* Scratch buffer for jsonl line parsing (reused, avoids per-line malloc) */
-    char line_buf[1024];
-} agy_scan_ctx_t;
-
 static int parse_transcript_line(const char *line, size_t len, size_t line_num, void *userdata) {
     (void)line_num;
     agy_scan_ctx_t *ctx = (agy_scan_ctx_t *)userdata;
@@ -95,9 +83,16 @@ static int parse_transcript_line(const char *line, size_t len, size_t line_num, 
         }
     }
 
-    free(buf);
+    /* buf points at the scan-context scratch buffer owned by the caller;
+       it is stack storage (no per-line heap allocation), so nothing to free. */
     return 0;
 }
+
+#ifdef TEST_MODE
+int flint_agy_parse_line(const char *line, size_t len, void *ctx) {
+    return parse_transcript_line(line, len, 0, ctx);
+}
+#endif
 
 typedef struct {
     const flint_config_t *cfg;

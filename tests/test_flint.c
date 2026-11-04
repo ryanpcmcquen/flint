@@ -5,6 +5,7 @@
 #include <unistd.h>
 #include "../source/flint.h"
 #include "../source/ai/mcp.h"
+#include "../source/ai/ai_adapter.h"
 #include "../source/brief/brief.h"
 #include "../source/config/config.h"
 #include "../source/git/git.h"
@@ -408,6 +409,41 @@ static void test_brief_and_mcp(void) {
 }
 
 
+static void test_antigravity_transcript_parsing(void) {
+    TEST("antigravity transcript line parse (regression: no invalid free)");
+    agy_scan_ctx_t ctx;
+    memset(&ctx, 0, sizeof(ctx));
+    ctx.origin = SESSION_ORIGIN_USER;
+
+    const char *line = "{\"step_index\":0,\"source\":\"USER_EXPLICIT\",\"type\":\"USER_INPUT\",\"status\":\"DONE\",\"created_at\":\"2026-11-03T21:41:23Z\",\"content\":\"<USER_REQUEST>\\nDo I have any usage left?\\n</USER_REQUEST>\\n\"}";
+    int rc = flint_agy_parse_line(line, (int)strlen(line), &ctx);
+    assert(rc == 0);
+    assert(ctx.origin == SESSION_ORIGIN_USER);
+    assert(ctx.prompt_count == 1);
+    assert(strstr(ctx.last_user_req, "usage left") != NULL);
+    PASS();
+
+    TEST("antigravity transcript line parse reuses scan ctx scratch buffer");
+    ctx.prompt_count = 0;
+    ctx.last_user_req[0] = '\0';
+    rc = flint_agy_parse_line(line, (int)strlen(line), &ctx);
+    assert(rc == 0);
+    assert(ctx.prompt_count == 1);
+    assert(strstr(ctx.last_user_req, "usage left") != NULL);
+    PASS();
+
+    TEST("antigravity transcript line parse skips overlong lines");
+    char long_line[1300];
+    memset(long_line, 'a', 1200);
+    long_line[1200] = '\0';
+    agy_scan_ctx_t ctx2;
+    memset(&ctx2, 0, sizeof(ctx2));
+    rc = flint_agy_parse_line(long_line, 1200, &ctx2);
+    assert(rc == 0);
+    assert(ctx2.prompt_count == 0);
+    PASS();
+}
+
 static void test_resume_mode_filter(void) {
     TEST("resume_mode filter: user sessions only");
     session_t s;
@@ -520,6 +556,7 @@ int main(void) {
     test_json_primitives();
     test_json_unescape();
     test_jsonl_scanning();
+    test_antigravity_transcript_parsing();
     test_path_utils();
     test_session_deduplication();
     test_terminal_registry();
