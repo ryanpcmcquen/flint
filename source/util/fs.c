@@ -15,23 +15,28 @@
   #include <pwd.h>
 #endif
 
+static const char *resolve_home_dir(void) {
+    const char *home = NULL;
+#ifdef _WIN32
+    home = getenv("USERPROFILE");
+    if (!home) {
+        home = getenv("HOME");
+    }
+#else
+    home = getenv("HOME");
+    if (!home) {
+        struct passwd *pw = getpwuid(getuid());
+        if (pw) home = pw->pw_dir;
+    }
+#endif
+    return home;
+}
+
 void fs_expand_path(const char *path, char *out, size_t out_size) {
     if (!path || !out || out_size == 0) return;
 
     if (path[0] == '~' && (path[1] == '/' || path[1] == '\\' || path[1] == '\0')) {
-        const char *home = NULL;
-#ifdef _WIN32
-        home = getenv("USERPROFILE");
-        if (!home) {
-            home = getenv("HOME");
-        }
-#else
-        home = getenv("HOME");
-        if (!home) {
-            struct passwd *pw = getpwuid(getuid());
-            if (pw) home = pw->pw_dir;
-        }
-#endif
+        const char *home = resolve_home_dir();
         if (home) {
             snprintf(out, out_size, "%s%s", home, path + 1);
             return;
@@ -40,6 +45,74 @@ void fs_expand_path(const char *path, char *out, size_t out_size) {
 
     strncpy(out, path, out_size - 1);
     out[out_size - 1] = '\0';
+}
+
+void fs_tildify_path(const char *path, char *out, size_t out_size) {
+    if (!out || out_size == 0) return;
+    if (!path) {
+        out[0] = '\0';
+        return;
+    }
+
+    const char *home = resolve_home_dir();
+    if (home && home[0] != '\0' && strcmp(home, "/") != 0) {
+        size_t home_len = strlen(home);
+        while (home_len > 1 && (home[home_len - 1] == '/' || home[home_len - 1] == '\\')) {
+            home_len--;
+        }
+        if (strncmp(path, home, home_len) == 0) {
+            char next = path[home_len];
+            if (next == '\0') {
+                snprintf(out, out_size, "~");
+                return;
+            }
+            if (next == '/' || next == '\\') {
+                snprintf(out, out_size, "~%s", path + home_len);
+                return;
+            }
+        }
+    }
+
+    strncpy(out, path, out_size - 1);
+    out[out_size - 1] = '\0';
+}
+
+static bool is_home_boundary_char(char c) {
+    return c == '\0' || c == '/' || c == '\\' || isspace((unsigned char)c) ||
+           c == '.' || c == ',' || c == ':' || c == ';' || c == ')' ||
+           c == ']' || c == '"' || c == '\'' || c == '`';
+}
+
+void fs_redact_home_paths(const char *src, char *out, size_t out_size) {
+    if (!out || out_size == 0) return;
+    if (!src) {
+        out[0] = '\0';
+        return;
+    }
+
+    const char *home = resolve_home_dir();
+    if (!home || home[0] == '\0' || strcmp(home, "/") == 0) {
+        strncpy(out, src, out_size - 1);
+        out[out_size - 1] = '\0';
+        return;
+    }
+
+    size_t home_len = strlen(home);
+    while (home_len > 1 && (home[home_len - 1] == '/' || home[home_len - 1] == '\\')) {
+        home_len--;
+    }
+
+    size_t used = 0;
+    const char *p = src;
+    while (*p && used + 1 < out_size) {
+        if (strncmp(p, home, home_len) == 0 && is_home_boundary_char(p[home_len])) {
+            out[used++] = '~';
+            p += home_len;
+        } else {
+            out[used++] = *p++;
+        }
+    }
+    out[used] = '\0';
 }
 
 bool fs_file_exists(const char *path) {

@@ -70,10 +70,15 @@ int journal_record_daily(const flint_config_t *cfg, const session_list_t *list) 
     } else {
         for (size_t i = 0; i < list->count; i++) {
             const session_t *s = &list->items[i];
-            fprintf(f, "### [%s] `%s`\n", s->tool_name, s->workspace);
+            char ws_tilde[MAX_PATH_LEN];
+            char summary_clean[MAX_SUMMARY_LEN];
+            fs_tildify_path(s->workspace, ws_tilde, sizeof(ws_tilde));
+            fs_redact_home_paths(s->summary, summary_clean, sizeof(summary_clean));
+
+            fprintf(f, "### [%s] `%s`\n", s->tool_name, ws_tilde);
             fprintf(f, "- **Session Origin**: %s\n", (s->origin == SESSION_ORIGIN_USER) ? "User" : "Agent/Subagent");
             fprintf(f, "- **Last Active**: %s\n", s->last_active_str);
-            fprintf(f, "- **Accomplishments**: %s\n", s->summary);
+            fprintf(f, "- **Accomplishments**: %s\n", summary_clean);
 
             if (s->git.is_git_repo) {
                 fprintf(f, "- **Git Branch**: `%s`\n", s->git.branch);
@@ -103,7 +108,9 @@ int journal_record_daily(const flint_config_t *cfg, const session_list_t *list) 
     for (size_t i = 0; i < list->count; i++) {
         const session_t *s = &list->items[i];
         if (s->git.suggested_focus[0] != '\0') {
-            fprintf(f, "- [ ] **%s**: %s\n", s->workspace, s->git.suggested_focus);
+            char ws_tilde[MAX_PATH_LEN];
+            fs_tildify_path(s->workspace, ws_tilde, sizeof(ws_tilde));
+            fprintf(f, "- [ ] **%s**: %s\n", ws_tilde, s->git.suggested_focus);
             has_focus = true;
         }
     }
@@ -115,7 +122,11 @@ int journal_record_daily(const flint_config_t *cfg, const session_list_t *list) 
     fprintf(f, "## Active Sessions to Resume\n\n");
     for (size_t i = 0; i < list->count; i++) {
         const session_t *s = &list->items[i];
-        fprintf(f, "- `%s` in `%s`\n", s->resume_cmd, s->workspace);
+        char ws_tilde[MAX_PATH_LEN];
+        char cmd_clean[MAX_CMD_LEN];
+        fs_tildify_path(s->workspace, ws_tilde, sizeof(ws_tilde));
+        fs_redact_home_paths(s->resume_cmd, cmd_clean, sizeof(cmd_clean));
+        fprintf(f, "- `%s` in `%s`\n", cmd_clean, ws_tilde);
     }
     fprintf(f, "\n---\n*Logged automatically by [Flint](https://github.com/ryanpcmcquen/flint)*\n");
 
