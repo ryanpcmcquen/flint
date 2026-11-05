@@ -782,6 +782,56 @@ static void test_claude_codex_discovery(void) {
     PASS();
 }
 
+static void test_opencode_discovery_parsing(void) {
+    TEST("opencode discovery parses every session in data[]");
+    long long now_ms = (long long)time(NULL) * 1000;
+    long long old_ms = now_ms - (48LL * 3600LL * 1000LL);
+
+    char json[2048];
+    snprintf(json, sizeof(json),
+             "{\"data\":["
+             "{\"id\":\"ses_flint\",\"title\":\"Building Flint\","
+             "\"time\":{\"updated\":%lld},\"location\":{\"directory\":\"/tmp/flint-ws\"}},"
+             "{\"id\":\"ses_scribe\",\"title\":\"Building Scribe\","
+             "\"time\":{\"updated\":%lld},\"location\":{\"directory\":\"/tmp/scribe-ws\"}},"
+             "{\"id\":\"ses_old\",\"title\":\"Old session\","
+             "\"time\":{\"updated\":%lld},\"location\":{\"directory\":\"/tmp/old-ws\"}}"
+             "]}",
+             now_ms, now_ms, old_ms);
+
+    flint_config_t cfg;
+    config_init_defaults(&cfg);
+    session_list_t list;
+    session_list_init(&list);
+
+    assert(flint_opencode_parse_json(json, &cfg, 24, &list) == 0);
+    assert(list.count == 2);
+
+    bool found_flint = false;
+    bool found_scribe = false;
+    for (size_t i = 0; i < list.count; i++) {
+        if (strcmp(list.items[i].summary, "Building Flint") == 0) {
+            found_flint = true;
+            assert(strcmp(list.items[i].id, "ses_flint") == 0);
+            assert(strcmp(list.items[i].workspace, "/tmp/flint-ws") == 0);
+            assert(strstr(list.items[i].resume_cmd, "opencode --session ses_flint") != NULL);
+        }
+        if (strcmp(list.items[i].summary, "Building Scribe") == 0) {
+            found_scribe = true;
+            assert(strcmp(list.items[i].id, "ses_scribe") == 0);
+            assert(strcmp(list.items[i].workspace, "/tmp/scribe-ws") == 0);
+            assert(strstr(list.items[i].resume_cmd, "opencode --session ses_scribe") != NULL);
+        }
+        assert(strcmp(list.items[i].id, "ses_old") != 0);
+    }
+    assert(found_flint);
+    assert(found_scribe);
+
+    session_list_free(&list);
+    config_destroy(&cfg);
+    PASS();
+}
+
 static void test_openclaw_discovery(void) {
     TEST("openclaw adapter discovery via openclaw sessions");
     const ai_adapter_t **adapters = NULL;
@@ -1146,6 +1196,7 @@ int main(void) {
     test_antigravity_transcript_parsing();
     test_ai_head_parsers();
     test_claude_codex_discovery();
+    test_opencode_discovery_parsing();
     test_openclaw_discovery();
     test_path_utils();
     test_session_deduplication();

@@ -7,13 +7,22 @@
 #include "../process/proc.h"
 #include <string.h>
 
-static int opencode_discover(const flint_config_t *cfg, int lookback_hours, session_list_t *list) {
-    char *output = exec_capture("opencode api session.list --param limit=100");
-    if (!output) return 0;
+static void opencode_parse_sessions(const char *json, const flint_config_t *cfg,
+                                    int lookback_hours, session_list_t *list) {
+    if (!json || !cfg || !list) return;
 
     time_t cutoff = time(NULL) - (lookback_hours * 3600);
-    const char *p = output;
 
+    char *data = (char *)malloc(strlen(json) + 1);
+    const char *scan = json;
+    if (data) {
+        data[0] = '\0';
+        if (json_get_block(json, "data", data, strlen(json) + 1)) {
+            scan = data;
+        }
+    }
+
+    const char *p = scan;
     while (true) {
         const char *end = NULL;
         const char *object = json_next_object(p, &end);
@@ -21,24 +30,24 @@ static int opencode_discover(const flint_config_t *cfg, int lookback_hours, sess
         p = end;
 
         size_t len = (size_t)(end - object);
-        char *json = (char *)malloc(len + 1);
-        if (!json) break;
+        char *session_json = (char *)malloc(len + 1);
+        if (!session_json) break;
 
-        memcpy(json, object, len);
-        json[len] = '\0';
+        memcpy(session_json, object, len);
+        session_json[len] = '\0';
 
         char id[MAX_NAME_LEN] = {0};
-        if (json_get_string(json, "id", id, sizeof(id))) {
+        if (json_get_string(session_json, "id", id, sizeof(id))) {
             char title[MAX_SUMMARY_LEN] = {0};
             char directory[MAX_PATH_LEN] = {0};
             char parent_id[MAX_NAME_LEN] = {0};
             long long updated_ms = 0;
 
-            json_get_string(json, "title", title, sizeof(title));
-            json_get_string(json, "directory", directory, sizeof(directory));
-            json_get_string(json, "parentID", parent_id, sizeof(parent_id));
+            json_get_string(session_json, "title", title, sizeof(title));
+            json_get_string(session_json, "directory", directory, sizeof(directory));
+            json_get_string(session_json, "parentID", parent_id, sizeof(parent_id));
 
-            if (json_get_long_long(json, "updated", &updated_ms)) {
+            if (json_get_long_long(session_json, "updated", &updated_ms)) {
                 time_t updated = (time_t)(updated_ms / 1000);
                 if (updated >= cutoff) {
                     session_t session;
@@ -77,12 +86,29 @@ static int opencode_discover(const flint_config_t *cfg, int lookback_hours, sess
             }
         }
 
-        free(json);
+        free(session_json);
     }
 
+    free(data);
+}
+
+static int opencode_discover(const flint_config_t *cfg, int lookback_hours, session_list_t *list) {
+    char *output = exec_capture("opencode api session.list --param limit=100");
+    if (!output) return 0;
+
+    opencode_parse_sessions(output, cfg, lookback_hours, list);
     free(output);
     return 0;
 }
+
+#ifdef TEST_MODE
+int flint_opencode_parse_json(const char *json, const flint_config_t *cfg,
+                              int lookback_hours, session_list_t *list) {
+    if (!json || !cfg || !list) return -1;
+    opencode_parse_sessions(json, cfg, lookback_hours, list);
+    return 0;
+}
+#endif
 
 static bool opencode_is_available(void) {
     char db_path[MAX_PATH_LEN];

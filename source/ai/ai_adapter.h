@@ -61,6 +61,10 @@ bool flint_codex_parse_head(const char *jsonl, codex_head_t *out);
 #ifdef TEST_MODE
 /* Test-only hook: run one Antigravity transcript line through the parser. */
 int flint_agy_parse_line(const char *line, size_t len, void *ctx);
+
+/* Test-only hook: parse an OpenCode session.list response. */
+int flint_opencode_parse_json(const char *json, const flint_config_t *cfg,
+                              int lookback_hours, session_list_t *list);
 #endif
 
 #endif /* FLINT_AI_ADAPTER_H */
