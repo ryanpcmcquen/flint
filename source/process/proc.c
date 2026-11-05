@@ -40,10 +40,11 @@ static void proc_exe_basename(const char *cmdline, char *out, size_t out_size) {
 }
 
 /* Cached `ps -eo pid,command` output. Flint is a one-shot CLI, so a
-   process-lifetime cache avoids spawning ps once per session. */
-#define PROC_PS_CACHE_MAX_LINES 256
-static char proc_ps_cache[PROC_PS_CACHE_MAX_LINES][1024];
+   process-lifetime cache avoids spawning ps once per session. The cache grows
+   on demand: a fixed small cap silently missed processes on busy machines. */
+static char **proc_ps_cache = NULL;
 static int proc_ps_cache_count = 0;
+static int proc_ps_cache_capacity = 0;
 
 /* Cached `lsof -a -d cwd -p <pid>` results, keyed by pid. */
 #define PROC_LSOF_CACHE_MAX 64
@@ -63,10 +64,20 @@ static void proc_load_ps_cache(void) {
     char line[1024];
     proc_ps_cache_count = 0;
     while (fgets(line, sizeof(line), pipe)) {
-        if (proc_ps_cache_count >= PROC_PS_CACHE_MAX_LINES) break;
-        strncpy(proc_ps_cache[proc_ps_cache_count], line, 1023);
-        proc_ps_cache[proc_ps_cache_count][1023] = '\0';
-        proc_ps_cache_count++;
+        if (proc_ps_cache_count >= proc_ps_cache_capacity) {
+            int new_capacity = proc_ps_cache_capacity ? proc_ps_cache_capacity * 2 : 256;
+            char **grown = (char **)realloc(proc_ps_cache,
+                                            (size_t)new_capacity * sizeof(char *));
+            if (!grown) break;
+            proc_ps_cache = grown;
+            proc_ps_cache_capacity = new_capacity;
+        }
+
+        size_t len = strlen(line);
+        char *entry = (char *)malloc(len + 1);
+        if (!entry) break;
+        memcpy(entry, line, len + 1);
+        proc_ps_cache[proc_ps_cache_count++] = entry;
     }
     pclose(pipe);
 }
