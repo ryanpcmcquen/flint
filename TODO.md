@@ -1,6 +1,6 @@
 # Flint TODO
 
-Status reviewed against the code on 2026-11-05. `make` builds cleanly and `make test` passes (68/68).
+Status reviewed against the code on 2026-11-06. `make` builds cleanly and `make test` passes (69/69).
 
 ## Original items
 
@@ -24,15 +24,19 @@ Status reviewed against the code on 2026-11-05. `make` builds cleanly and `make 
   - Testing: new tests in `tests/test_flint.c` (lookup, format with/without wrapper, config file parsing for `[agy]` and `[codex]` alias sections). `make test` → 17/17.
   - End-to-end: `flint --init-config` writes a working template; `flint -c <file> --summary --dry-run` resolves the matching tool and prepends the configured wrapper to the resume command.
   - `--wrapper <name>` is now wired: it applies the launcher to every configured tool at runtime (`config_set_wrapper_all()`), covering tools without a config-file `wrapper` entry. README documents both the CLI flag and the tool-config format.
-- [x] **Verify the code is as performant as possible.** DONE for all identified hotspots; formal profiling/benchmarking still open.
+- [x] **Verify the code is as performant as possible.** DONE. Formal wall-clock benchmarking and `sample` profiling are now part of the repo.
   - Done so far: `proc_is_session_running()` caches the `ps -eo pid,command` output for the process lifetime instead of spawning `ps` per session.
   - Done so far: `lsof` cwd lookups are now cached per pid (`proc_lsof_cwd`).
   - Done so far: `git_inspect_workspace()` uses a single `git status --porcelain -b` (was 3 git subprocesses: `rev-parse`, `status`, `log`).
   - Done so far: `parse_transcript_line()` reuses a scratch buffer in `agy_scan_ctx_t` instead of malloc/free per line.
   - **BUG FOUND & FIXED (2026-11-03):** the scratch-buffer refactor left a stale `free(buf)` behind, so the callback freed a stack buffer (`agy_scan_ctx_t.line_buf`) → glibc abort: `malloc: *** error for object ...: pointer being freed was not allocated` → SIGABRT on `./flint --summary`. **Fixed**: removed the stale `free`; added regression tests feeding real transcript lines through the parser (`make test` → 40/40).
-  - Measurements (2026-11-04, macOS arm64): `./flint --summary` ≈ **3.4s**; `./flint -r -n` ≈ **1.2s**; `./flint --summary --days 7` ≈ **1.5s**, with 4 AI sessions across 3 workspaces.
-  - Formal profiling/benchmarking: tooling unavailable in this environment (no gdb/valgrind/perf; dtrace exec tracing restricted by SIP) — code-path reasoning + wall-clock timings used instead.
-  - Profile with a realistic number of sessions before optimizing further. `session_list_add()` dedupes with a linear scan. This is fine for small lists.
+  - **Formal benchmark (2026-11-06, macOS arm64, 5 runs, median):** `make benchmark` now runs each scenario with warmup and reports min/median/mean/max:
+    - `summary` (no MCP): **1.35s**
+    - `summary --days 7` (no MCP): **1.59s**
+    - `resume --dry-run --days 7` (no MCP): **1.60s**
+    - `summary` with MCP host detection: **5.05s** when no host has configured servers
+  - **Formal profile (`sample`)**: the no-MCP run spends almost all sampled time waiting on adapter subprocesses, primarily `openclaw sessions --json` (~80% of samples) and OpenCode discovery (~12%), not in Flint's own parsing. The MCP-enabled run adds one list command per installed host; that is the main remaining latency cost when no MCP servers are configured.
+  - Formal profiling/benchmarking tooling is now reproducible via `make benchmark`; `sample` remains macOS-only.
 - [x] **Make the amount of hours to check for active sessions configurable.** DONE.
   - Config key `lookback_hours` (default 24), CLI `--hours <H>` and `-d/--days <N>`. The CLI overrides the config (`flint.c`, `main()`).
   - I ran it with a `lookback_hours` config file and the CLI flags. The sample data was inconclusive: the one transcript was 53 minutes old, which fits inside the 1-hour window. The override logic is straightforward when reading the code.
@@ -51,9 +55,11 @@ Status reviewed against the code on 2026-11-05. `make` builds cleanly and `make 
   - Codex: recursively scans `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`), parses the `session_meta` payload for `id`/`cwd`/git branch/subagent metadata, and falls back to the first bare metadata object used by older rollouts. Summaries come from `event_msg`/`response_item` user messages. Resume: `codex resume <thread-id>`.
   - The old placeholder logic (Claude `"claude-session"` IDs and `%2F` project-name decoding; Codex top-level `~/.codex` entries with workspace `~`) is gone.
   - Fixture tests cover array/string Claude content, custom titles, sidechains, Codex `session_meta`, `event_msg`, `response_item`, subagent metadata, malformed input, and temp-home discovery. E2E dry-run against a synthetic `HOME` produced both resume commands. Suite is now **68/68**.
-  - Known limits: Codex rollouts compressed as `.jsonl.zst` and sessions under `~/.codex/archived_sessions/` are not scanned yet; Claude's undocumented transcript schema can change between releases (the parser tolerates unknown lines and truncated tails).
+  - Known limits: Codex `.jsonl.zst` rollouts require `zstd` on `PATH`; archived sessions under `~/.codex/archived_sessions/` are now scanned. Claude's undocumented transcript schema can change between releases (the parser tolerates unknown lines and truncated tails).
 - [x] **OpenCode discovery only saw one session (2026-11-05).** `opencode api session.list` returns `{"data":[...]}`, but the adapter iterated the outer wrapper object as if each session were top-level. It therefore parsed only the first nested session and could flip between "Building Flint" and "Building Scribe" depending on recency. Fixed by extracting the `data` array before iterating, with a regression fixture covering multiple sessions and the lookback cutoff.
 - [x] **Running-session detection missed processes on busy machines (2026-11-05).** The `ps -eo pid,command` cache was capped at 256 lines; this machine had 820, so the OpenCode TUI was never checked and already-running sessions were offered for resume. The cache now grows dynamically.
+- [x] **Codex compressed and archived rollouts (2026-11-06).** Discovery now scans `$CODEX_HOME/archived_sessions` in addition to `sessions`, accepts `.jsonl.zst` rollouts via `zstd -dc`, and strips either suffix when falling back to the filename UUID. Fixtures cover archived and compressed sessions.
+- [x] **Multiple sessions in the same workspace/tool were deduped (2026-11-06).** `session_list_add()` now dedupes by tool + session id, so distinct sessions like "Building Flint" and "Building Scribe" both remain even when they share a workspace. Adapters without ids still fall back to workspace+tool deduplication. Regression test covers distinct ids plus updating the same id.
 - [x] `proc_is_session_running()` matches `strstr(prog, tool_cmd)`, so a short name like `agy` can match unrelated command lines. Fixed: POSIX branch now extracts the executable basename from the first command token (after any path) and compares it to the tool name case-insensitively; workspace fallback (lsof cwd check) unchanged. Windows branch already compared exact exe names (`tool_cmd` vs `tool_cmd.exe`) and ignores the workspace — left as a known limitation.
 - [x] Audit the codebase for remnants / cleanup after AI model & CLI switching experiments (stale flags, dead code, half-finished wiring, duplicated logic).
   - Audit findings (2026-11-02, post PR #1 merge):
@@ -62,7 +68,7 @@ Status reviewed against the code on 2026-11-05. `make` builds cleanly and `make 
     - Half-wired remnant: `flint_config_t.open_in_tabs` is parsed, written to the config template, and documented, but never consumed by resume/launch logic. **FIXED:** `open_in_tabs` is now passed through `resume_sessions()` into every terminal adapter, which opens tabs or windows accordingly (Apple Terminal, iTerm2, Ghostty, Kitty, GNOME Terminal, Konsole, Windows Terminal; Alacritty and PowerShell have no tab API and always open windows).
     - No debug leftovers (DEBUG/FIXME/XXX/HACK) found in source.
     - No duplicated logic introduced by the merge resolution (fs_mkdir_p conflict resolved to single `int` version).
-- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing via `flint_agy_parse_line` regression tests; OpenCode `data[]` session parsing; OpenClaw discovery via adapter-level test; Claude/Codex head parsing + temp-home discovery; per-CLI MCP list/result parsers + prompt-command builders; MCP focus/query + `mcp_collect_line` internals via new tests) are covered — suite now **68/68**. Config defaults now cover OpenClaw and `open_in_tabs`, plus the `--wrapper` override, `[openclaw]` section parsing, and `mcp_host`. `proc` and `resume_mode` filtering are covered. Remaining gap: real-CLI Claude/Codex resume e2e still needs the binaries installed.
+- [ ] Test coverage is thin. AI adapter internals (Antigravity transcript parsing via `flint_agy_parse_line` regression tests; OpenCode `data[]` session parsing; OpenClaw discovery via adapter-level test; Claude/Codex head parsing + temp-home discovery; Codex archived/compressed rollout discovery; per-CLI MCP list/result parsers + prompt-command builders; MCP focus/query + `mcp_collect_line` internals; same-workspace multi-session deduplication) are covered — suite now **69/69**. Config defaults now cover OpenClaw and `open_in_tabs`, plus the `--wrapper` override, `[openclaw]` section parsing, and `mcp_host`. `proc` and `resume_mode` filtering are covered. Remaining gap: real-CLI Claude/Codex resume e2e still needs the binaries installed.
 - [x] Housekeeping: untracked `flint.dSYM/` and the `flint` binary are ignored via `.gitignore`. Committed this TODO.md.
 - [x] OpenClaw was discovered/resumed but missing from the default tool list, `--init-config` template, and README config example. Fixed: `config_init_defaults()` now adds `openclaw`, the template includes an `[openclaw]` section, and the README mirrors it.
 - [x] **Heap-buffer-overflow in `run_prompt()` (`source/ai/mcp.c`), found with ASan:** the command buffer size was computed from `strlen()` of freshly malloc'd, uninitialized quote buffers. Fixed by quoting first and sizing the command from the initialized strings; the MCP prompt test no longer invokes `opencode` for a rejected input. Full suite is ASan/UBSan-clean.
