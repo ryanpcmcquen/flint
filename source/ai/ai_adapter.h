@@ -67,4 +67,4 @@ int flint_opencode_parse_json(const char *json, const flint_config_t *cfg,
                               int lookback_hours, session_list_t *list);
 #endif
 
-#endif /* FLINT_AI_ADAPTER_H */
+#endif

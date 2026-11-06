@@ -78,7 +78,8 @@ bool resume_session_should_include(const session_t *s, resume_mode_t mode) {
     if (!s) return false;
     if (mode == RESUME_MODE_USER) return s->origin == SESSION_ORIGIN_USER;
     if (mode == RESUME_MODE_AGENT) return s->origin == SESSION_ORIGIN_AGENT;
-    return true; /* RESUME_MODE_ALL */
+    /* RESUME_MODE_ALL */
+    return true;
 }
 
 #ifndef TEST_MODE

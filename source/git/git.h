@@ -9,4 +9,4 @@ bool git_is_repo(const char *workspace_path);
 /* Inspect Git activity: branch, recent commits, uncommitted diffs, and suggested focus */
 int git_inspect_workspace(const char *workspace_path, int lookback_hours, git_info_t *out_info);
 
-#endif /* FLINT_GIT_H */
+#endif

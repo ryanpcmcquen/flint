@@ -32,4 +32,4 @@ void config_set_wrapper_all(flint_config_t *cfg, const char *wrapper);
 void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
                             const char *session_id, char *out_cmd, size_t out_size);
 
-#endif /* FLINT_CONFIG_H */
+#endif

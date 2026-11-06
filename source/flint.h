@@ -27,15 +27,20 @@
 
 /* Session creation origin */
 typedef enum {
-    SESSION_ORIGIN_USER = 0,    /* Directly created/prompted by the human user */
-    SESSION_ORIGIN_AGENT = 1    /* Created by an agent/subagent or background automation */
+    /* Directly created/prompted by the human user */
+    SESSION_ORIGIN_USER = 0,
+    /* Created by an agent/subagent or background automation */
+    SESSION_ORIGIN_AGENT = 1
 } session_origin_t;
 
 /* Resume filter modes */
 typedef enum {
-    RESUME_MODE_USER = 0,       /* Only user-created sessions (default) */
-    RESUME_MODE_ALL = 1,        /* Both user and agent-created sessions */
-    RESUME_MODE_AGENT = 2       /* Only agent-created sessions */
+    /* Only user-created sessions (default) */
+    RESUME_MODE_USER = 0,
+    /* Both user and agent-created sessions */
+    RESUME_MODE_ALL = 1,
+    /* Only agent-created sessions */
+    RESUME_MODE_AGENT = 2
 } resume_mode_t;
 
 /* Local Git Activity */
@@ -52,17 +57,28 @@ typedef struct {
 /* Session representation */
 typedef struct {
     char id[MAX_NAME_LEN];
-    char tool_name[MAX_NAME_LEN];       /* e.g., "Antigravity CLI", "Claude Code", "ChatGPT Codex" */
-    char tool_cmd[MAX_NAME_LEN];        /* e.g., "agy", "claude", "codex" */
-    char workspace[MAX_PATH_LEN];       /* Project working directory */
-    time_t last_active;                 /* Timestamp of last activity or access */
-    char last_active_str[64];           /* Human-readable timestamp */
-    char summary[MAX_SUMMARY_LEN];      /* Accomplishment summary */
-    char resume_cmd[MAX_CMD_LEN];       /* Full command to resume, with wrapper & flags */
-    session_origin_t origin;            /* USER or AGENT */
-    bool was_merely_open;               /* Open yesterday without completed prompts */
-    bool is_already_running;            /* Process is currently running */
-    git_info_t git;                     /* Git status for the workspace */
+    /* e.g., "Antigravity CLI", "Claude Code", "ChatGPT Codex" */
+    char tool_name[MAX_NAME_LEN];
+    /* e.g., "agy", "claude", "codex" */
+    char tool_cmd[MAX_NAME_LEN];
+    /* Project working directory */
+    char workspace[MAX_PATH_LEN];
+    /* Timestamp of last activity or access */
+    time_t last_active;
+    /* Human-readable timestamp */
+    char last_active_str[64];
+    /* Accomplishment summary */
+    char summary[MAX_SUMMARY_LEN];
+    /* Full command to resume, with wrapper & flags */
+    char resume_cmd[MAX_CMD_LEN];
+    /* USER or AGENT */
+    session_origin_t origin;
+    /* Open yesterday without completed prompts */
+    bool was_merely_open;
+    /* Process is currently running */
+    bool is_already_running;
+    /* Git status for the workspace */
+    git_info_t git;
 } session_t;
 
 /* List of discovered sessions */
@@ -74,10 +90,14 @@ typedef struct {
 
 /* Per-tool configuration options */
 typedef struct {
-    char name[MAX_NAME_LEN];            /* e.g., "agy", "claude", "codex" */
-    char wrapper[MAX_NAME_LEN];         /* e.g., "graperoot" or empty */
-    char model[MAX_NAME_LEN];           /* e.g., "gemini-3.8-flash", "claude-3-7-sonnet" */
-    char effort[MAX_NAME_LEN];          /* e.g., "high", "medium", "low" */
+    /* e.g., "agy", "claude", "codex" */
+    char name[MAX_NAME_LEN];
+    /* e.g., "graperoot" or empty */
+    char wrapper[MAX_NAME_LEN];
+    /* e.g., "gemini-3.8-flash", "claude-3-7-sonnet" */
+    char model[MAX_NAME_LEN];
+    /* e.g., "high", "medium", "low" */
+    char effort[MAX_NAME_LEN];
 } tool_config_t;
 
 /* Plaintext Flint configuration (~/.config/flint/config) */
@@ -88,8 +108,10 @@ typedef struct {
     int lookback_hours;
     bool open_in_tabs;
     bool auto_journal;
-    bool mcp_focus;                     /* Query connected MCP tools for today's focus */
-    char mcp_host[MAX_NAME_LEN];        /* Preferred MCP host: auto (blank), agy, claude, cline, codex, opencode, openclaw */
+    /* Query connected MCP tools for today's focus */
+    bool mcp_focus;
+    /* Preferred MCP host: auto (blank), agy, claude, cline, codex, opencode, openclaw */
+    char mcp_host[MAX_NAME_LEN];
 
     /* Ordered list of tool configurations. Each AI CLI adapter owns one
      * entry; anything not listed gets no wrapper by default. */
@@ -105,14 +127,16 @@ typedef struct {
     bool dry_run;
     int lookback_hours;
     char target_terminal[MAX_NAME_LEN];
-    char wrapper_override[MAX_NAME_LEN];  /* --wrapper: prepend to every resume command */
+    /* --wrapper: prepend to every resume command */
+    char wrapper_override[MAX_NAME_LEN];
     char workspace_filter[MAX_PATH_LEN];
     char config_path[MAX_PATH_LEN];
     bool list_terminals;
     bool write_journal;
     bool weekly_summary;
     bool monthly_summary;
-    int mcp_focus_override;             /* -1 = unset, 0 = off, 1 = on */
+    /* -1 = unset, 0 = off, 1 = on */
+    int mcp_focus_override;
 } flint_options_t;
 
 /* Session list management functions */
@@ -123,4 +147,4 @@ void session_list_free(session_list_t *list);
 /* Whether a session should be included given the resume mode filter */
 bool resume_session_should_include(const session_t *s, resume_mode_t mode);
 
-#endif /* FLINT_H */
+#endif

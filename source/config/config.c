@@ -300,7 +300,8 @@ bool config_create_default_file(const char *path) {
     }
 
     if (fs_file_exists(target)) {
-        return false; /* Already exists: never overwrite an existing config. */
+        /* Already exists: never overwrite an existing config. */
+        return false;
     }
 
     FILE *f = fopen(target, "w");

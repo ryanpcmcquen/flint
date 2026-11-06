@@ -22,7 +22,8 @@ static void journal_push_to_remote(const char *repo) {
     snprintf(check_cmd, sizeof(check_cmd), "git -C \"%s\" remote get-url origin >/dev/null 2>&1", repo);
 #endif
     if (system(check_cmd) != 0) {
-        return; /* no remote named "origin" is configured */
+        /* no remote named "origin" is configured */
+        return;
     }
 
     char push_cmd[MAX_CMD_LEN * 2];
