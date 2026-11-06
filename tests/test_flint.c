@@ -721,6 +721,87 @@ static const ai_adapter_t *find_test_adapter(const char *binary) {
     return NULL;
 }
 
+static void test_mcp_host_gating(void) {
+    TEST("mcp host gating skips unconfigured hosts");
+    char old_home[MAX_PATH_LEN] = {0};
+    char old_codex_home[MAX_PATH_LEN] = {0};
+    const char *home_env = getenv("HOME");
+    const char *codex_env = getenv("CODEX_HOME");
+    if (home_env) strncpy(old_home, home_env, sizeof(old_home) - 1);
+    if (codex_env) strncpy(old_codex_home, codex_env, sizeof(old_codex_home) - 1);
+
+    char root[MAX_PATH_LEN];
+    char home[MAX_PATH_LEN];
+    char workspace[MAX_PATH_LEN];
+    snprintf(root, sizeof(root), "/tmp/flint_mcp_gate_test_%d", (int)getpid());
+    snprintf(home, sizeof(home), "%s/home", root);
+    snprintf(workspace, sizeof(workspace), "%s/ws", root);
+    assert(fs_mkdir_p(home) == 0);
+    assert(fs_mkdir_p(workspace) == 0);
+    setenv("HOME", home, 1);
+
+    char path[MAX_PATH_LEN];
+    char dir[MAX_PATH_LEN];
+
+    snprintf(dir, sizeof(dir), "%s/.gemini/config", home);
+    snprintf(path, sizeof(path), "%s/mcp_config.json", dir);
+    assert(fs_mkdir_p(dir) == 0);
+    write_test_file(path, "{}");
+    assert(flint_mcp_host_may_have_servers("agy", workspace) == false);
+    write_test_file(path, "{\"mcpServers\":{\"slack\":{}}}");
+    assert(flint_mcp_host_may_have_servers("agy", workspace) == true);
+
+    snprintf(dir, sizeof(dir), "%s/.cline/data/settings", home);
+    snprintf(path, sizeof(path), "%s/cline_mcp_settings.json", dir);
+    assert(fs_mkdir_p(dir) == 0);
+    assert(flint_mcp_host_may_have_servers("cline", workspace) == false);
+    write_test_file(path, "{\"mcpServers\":{}}");
+    assert(flint_mcp_host_may_have_servers("cline", workspace) == false);
+    write_test_file(path, "{\"mcpServers\":{\"slack\":{}}}");
+    assert(flint_mcp_host_may_have_servers("cline", workspace) == true);
+
+    snprintf(dir, sizeof(dir), "%s/.openclaw", home);
+    snprintf(path, sizeof(path), "%s/openclaw.json", dir);
+    assert(fs_mkdir_p(dir) == 0);
+    write_test_file(path, "{\"plugins\":{}}");
+    assert(flint_mcp_host_may_have_servers("openclaw", workspace) == false);
+    write_test_file(path, "{\"mcp\":{\"servers\":{\"slack\":{}}}}");
+    assert(flint_mcp_host_may_have_servers("openclaw", workspace) == true);
+
+    char codex_home[MAX_PATH_LEN];
+    snprintf(codex_home, sizeof(codex_home), "%s/.codex", home);
+    snprintf(path, sizeof(path), "%s/config.toml", codex_home);
+    assert(fs_mkdir_p(codex_home) == 0);
+    setenv("CODEX_HOME", codex_home, 1);
+    assert(flint_mcp_host_may_have_servers("codex", workspace) == false);
+    write_test_file(path, "[mcp_servers.slack]\ncommand = \"slack-mcp\"\n");
+    assert(flint_mcp_host_may_have_servers("codex", workspace) == true);
+
+    snprintf(path, sizeof(path), "%s/.claude.json", home);
+    write_test_file(path, "{\"mcpServers\":{}}");
+    assert(flint_mcp_host_may_have_servers("claude", workspace) == false);
+    snprintf(path, sizeof(path), "%s/.mcp.json", workspace);
+    write_test_file(path, "{\"mcpServers\":{\"slack\":{}}}");
+    assert(flint_mcp_host_may_have_servers("claude", workspace) == true);
+
+    assert(flint_mcp_host_may_have_servers("opencode", workspace) == true);
+
+    unsetenv("CODEX_HOME");
+    if (old_codex_home[0] != '\0') {
+        setenv("CODEX_HOME", old_codex_home, 1);
+    }
+    if (old_home[0] != '\0') {
+        setenv("HOME", old_home, 1);
+    } else {
+        unsetenv("HOME");
+    }
+
+    char cleanup[MAX_PATH_LEN + 32];
+    snprintf(cleanup, sizeof(cleanup), "rm -rf '%s'", root);
+    assert(system(cleanup) == 0);
+    PASS();
+}
+
 static void test_claude_codex_discovery(void) {
     TEST("claude discovery from ~/.claude/projects");
     char old_home[MAX_PATH_LEN] = {0};
@@ -1326,6 +1407,7 @@ int main(void) {
     test_brief_and_mcp();
     test_mcp_focus_internals();
     test_mcp_host_backends();
+    test_mcp_host_gating();
     test_git_inspection();
     test_journal_generation();
     test_proc_running();
