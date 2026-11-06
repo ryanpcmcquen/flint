@@ -42,12 +42,14 @@ const terminal_adapter_t term_windows_terminal = {
 
 /* PowerShell / ConHost */
 static bool powershell_is_available(void) {
-    return true; /* Native on all modern Windows installations */
+    /* Native on all modern Windows installations */
+    return true;
 }
 
 static int powershell_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
-    (void)open_in_tabs; /* PowerShell launches in a new console window. */
+    /* PowerShell launches in a new console window. */
+    (void)open_in_tabs;
     snprintf(cmd, sizeof(cmd),
              "start powershell.exe -NoExit -Command \"Set-Location '%s'; %s\"",
              session->workspace, session->resume_cmd);
@@ -75,7 +77,8 @@ static bool alacritty_win_is_available(void) {
 
 static int alacritty_win_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
-    (void)open_in_tabs; /* Alacritty has no tab API; every launch is a window. */
+    /* Alacritty has no tab API; every launch is a window. */
+    (void)open_in_tabs;
     snprintf(cmd, sizeof(cmd),
              "start alacritty.exe --working-directory \"%s\" -e cmd.exe /k \"%s\"",
              session->workspace, session->resume_cmd);

@@ -63,4 +63,4 @@ bool str_has_suffix(const char *str, const char *suffix);
 bool str_contains_ignore_case(const char *haystack, const char *needle);
 void str_truncate_clean(char *dest, const char *src, size_t max_len);
 
-#endif /* FLINT_UTIL_FS_H */
+#endif

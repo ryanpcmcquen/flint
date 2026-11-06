@@ -49,4 +49,4 @@ bool mcp_query_prompt(const char *host_id, const char *workspace, const char *co
                       const char *servers, const char *instructions, char *out,
                       size_t out_size, char *session_id_out);
 
-#endif /* FLINT_AI_MCP_H */
+#endif

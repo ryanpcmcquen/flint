@@ -12,4 +12,4 @@ int journal_generate_weekly(const flint_config_t *cfg);
 /* Generate a monthly summary (past 30 days) and print/save it */
 int journal_generate_monthly(const flint_config_t *cfg);
 
-#endif /* FLINT_JOURNAL_H */
+#endif

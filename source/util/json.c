@@ -64,7 +64,8 @@ bool json_get_string(const char *json, const char *key, char *out, size_t out_si
     while (*val && isspace((unsigned char)*val)) val++;
     if (*val != '"') return false;
 
-    val++; /* Skip leading quote */
+    /* Skip leading quote */
+    val++;
     const char *start = val;
     bool escaped = false;
 

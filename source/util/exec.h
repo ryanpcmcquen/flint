@@ -14,4 +14,4 @@ bool exec_command_exists(const char *name);
 /* Quote a string so it can be embedded in a shell command. */
 void exec_shell_quote(const char *in, char *out, size_t out_size);
 
-#endif /* FLINT_UTIL_EXEC_H */
+#endif

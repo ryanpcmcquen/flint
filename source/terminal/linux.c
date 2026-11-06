@@ -44,7 +44,8 @@ static bool alacritty_linux_is_available(void) {
 
 static int alacritty_linux_launch(const session_t *session, bool dry_run, bool open_in_tabs) {
     char cmd[MAX_CMD_LEN * 2];
-    (void)open_in_tabs; /* Alacritty has no tab API; every launch is a window. */
+    /* Alacritty has no tab API; every launch is a window. */
+    (void)open_in_tabs;
     snprintf(cmd, sizeof(cmd),
              "alacritty --working-directory \"%s\" -e bash -c \"%s; exec bash\" >/dev/null 2>&1 &",
              session->workspace, session->resume_cmd);

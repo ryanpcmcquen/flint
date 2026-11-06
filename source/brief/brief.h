@@ -40,4 +40,4 @@ bool brief_add_scribe_focus(brief_t *brief, const char *text, size_t max_items);
  * its output into the brief focus list. */
 bool brief_collect_scribe_focus(brief_t *brief, size_t max_items);
 
-#endif /* FLINT_BRIEF_H */
+#endif

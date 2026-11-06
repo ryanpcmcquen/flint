@@ -36,4 +36,4 @@ int jsonl_for_each_line(const char *content, jsonl_line_cb_t callback, void *use
 /* Extract clean text from markdown/XML tags like <USER_REQUEST>...</USER_REQUEST> */
 void extract_tagged_text(const char *src, const char *tag, char *dst, size_t dst_size);
 
-#endif /* FLINT_UTIL_JSON_H */
+#endif
