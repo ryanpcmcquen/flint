@@ -173,6 +173,52 @@ static void test_session_deduplication(void) {
 
     session_list_free(&list);
     PASS();
+
+    TEST("session_list keeps distinct ids in the same workspace");
+    session_list_t multi;
+    session_list_init(&multi);
+
+    session_t a;
+    memset(&a, 0, sizeof(a));
+    strncpy(a.id, "ses_a", sizeof(a.id) - 1);
+    strncpy(a.workspace, "same-project", sizeof(a.workspace) - 1);
+    strncpy(a.tool_cmd, "opencode", sizeof(a.tool_cmd) - 1);
+    strncpy(a.summary, "First session", sizeof(a.summary) - 1);
+    a.last_active = 100;
+    session_list_add(&multi, &a);
+
+    session_t b;
+    memset(&b, 0, sizeof(b));
+    strncpy(b.id, "ses_b", sizeof(b.id) - 1);
+    strncpy(b.workspace, "same-project", sizeof(b.workspace) - 1);
+    strncpy(b.tool_cmd, "opencode", sizeof(b.tool_cmd) - 1);
+    strncpy(b.summary, "Second session", sizeof(b.summary) - 1);
+    b.last_active = 200;
+    session_list_add(&multi, &b);
+
+    assert(multi.count == 2);
+
+    session_t a_newer = a;
+    strncpy(a_newer.summary, "First session updated", sizeof(a_newer.summary) - 1);
+    a_newer.last_active = 300;
+    session_list_add(&multi, &a_newer);
+
+    assert(multi.count == 2);
+    bool found_updated = false;
+    bool found_second = false;
+    for (size_t i = 0; i < multi.count; i++) {
+        if (strcmp(multi.items[i].id, "ses_a") == 0) {
+            found_updated = strcmp(multi.items[i].summary, "First session updated") == 0;
+        }
+        if (strcmp(multi.items[i].id, "ses_b") == 0) {
+            found_second = true;
+        }
+    }
+    assert(found_updated);
+    assert(found_second);
+
+    session_list_free(&multi);
+    PASS();
 }
 
 static void test_terminal_registry(void) {
@@ -726,7 +772,7 @@ static void test_claude_codex_discovery(void) {
     config_destroy(&cfg);
     PASS();
 
-    TEST("codex discovery from $CODEX_HOME/sessions");
+    TEST("codex discovery from $CODEX_HOME/sessions, archived_sessions, and .jsonl.zst");
     char codex_home[MAX_PATH_LEN];
     char codex_day[MAX_PATH_LEN];
     char codex_file[MAX_PATH_LEN];
@@ -749,6 +795,58 @@ static void test_claude_codex_discovery(void) {
              "\"message\":\"Add real Codex discovery\"}}\n",
              codex_workspace);
     write_test_file(codex_file, codex_fixture);
+
+    char codex_archived_day[MAX_PATH_LEN];
+    char codex_archived_file[MAX_PATH_LEN];
+    char codex_archived_workspace[MAX_PATH_LEN];
+    snprintf(codex_archived_day, sizeof(codex_archived_day),
+             "%s/archived_sessions/2026/11/04", codex_home);
+    snprintf(codex_archived_file, sizeof(codex_archived_file),
+             "%s/rollout-2026-11-04T11-00-00-33333333-3333-4333-8333-333333333333.jsonl",
+             codex_archived_day);
+    snprintf(codex_archived_workspace, sizeof(codex_archived_workspace),
+             "%s/codex-archived-workspace", root);
+    assert(fs_mkdir_p(codex_archived_day) == 0);
+    assert(fs_mkdir_p(codex_archived_workspace) == 0);
+    char codex_archived_fixture[2048];
+    snprintf(codex_archived_fixture, sizeof(codex_archived_fixture),
+             "{\"type\":\"session_meta\",\"payload\":{\"id\":\"33333333-3333-4333-8333-333333333333\","
+             "\"cwd\":\"%s\"}}\n"
+             "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\","
+             "\"message\":\"Archived Codex session\"}}\n",
+             codex_archived_workspace);
+    write_test_file(codex_archived_file, codex_archived_fixture);
+
+    bool have_zstd = system("command -v zstd >/dev/null 2>&1") == 0;
+    char codex_compressed_plain[MAX_PATH_LEN];
+    char codex_compressed_file[MAX_PATH_LEN];
+    char codex_compressed_workspace[MAX_PATH_LEN];
+    snprintf(codex_compressed_plain, sizeof(codex_compressed_plain),
+             "%s/rollout-2026-11-04T10-00-00-44444444-4444-4444-8444-444444444444.jsonl",
+             codex_day);
+    snprintf(codex_compressed_file, sizeof(codex_compressed_file), "%s.zst",
+             codex_compressed_plain);
+    snprintf(codex_compressed_workspace, sizeof(codex_compressed_workspace),
+             "%s/codex-compressed-workspace", root);
+    assert(fs_mkdir_p(codex_compressed_workspace) == 0);
+    char codex_compressed_fixture[2048];
+    snprintf(codex_compressed_fixture, sizeof(codex_compressed_fixture),
+             "{\"type\":\"session_meta\",\"payload\":{\"id\":\"44444444-4444-4444-8444-444444444444\","
+             "\"cwd\":\"%s\"}}\n"
+             "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\","
+             "\"message\":\"Compressed Codex session\"}}\n",
+             codex_compressed_workspace);
+    write_test_file(codex_compressed_plain, codex_compressed_fixture);
+    if (have_zstd) {
+        char zstd_cmd[MAX_PATH_LEN * 2 + 64];
+        snprintf(zstd_cmd, sizeof(zstd_cmd), "zstd -q -f '%s' -o '%s'",
+                 codex_compressed_plain, codex_compressed_file);
+        if (system(zstd_cmd) != 0) {
+            have_zstd = false;
+        }
+    }
+    remove(codex_compressed_plain);
+
     setenv("CODEX_HOME", codex_home, 1);
 
     const ai_adapter_t *codex = find_test_adapter("codex");
@@ -758,11 +856,33 @@ static void test_claude_codex_discovery(void) {
     session_list_t codex_list;
     session_list_init(&codex_list);
     assert(codex->discover_sessions(&codex_cfg, 24, &codex_list) == 0);
-    assert(codex_list.count == 1);
-    assert(strcmp(codex_list.items[0].id, "22222222-2222-4222-8222-222222222222") == 0);
-    assert(strcmp(codex_list.items[0].workspace, codex_workspace) == 0);
-    assert(strcmp(codex_list.items[0].summary, "Add real Codex discovery") == 0);
-    assert(strstr(codex_list.items[0].resume_cmd, "codex resume 22222222-2222-4222-8222-222222222222") != NULL);
+    assert(codex_list.count == (size_t)(have_zstd ? 3 : 2));
+
+    bool found_codex = false;
+    bool found_archived = false;
+    bool found_compressed = false;
+    for (size_t i = 0; i < codex_list.count; i++) {
+        if (strcmp(codex_list.items[i].id, "22222222-2222-4222-8222-222222222222") == 0) {
+            found_codex = true;
+            assert(strcmp(codex_list.items[i].workspace, codex_workspace) == 0);
+            assert(strcmp(codex_list.items[i].summary, "Add real Codex discovery") == 0);
+            assert(strstr(codex_list.items[i].resume_cmd,
+                          "codex resume 22222222-2222-4222-8222-222222222222") != NULL);
+        }
+        if (strcmp(codex_list.items[i].id, "33333333-3333-4333-8333-333333333333") == 0) {
+            found_archived = true;
+            assert(strcmp(codex_list.items[i].workspace, codex_archived_workspace) == 0);
+            assert(strcmp(codex_list.items[i].summary, "Archived Codex session") == 0);
+        }
+        if (strcmp(codex_list.items[i].id, "44444444-4444-4444-8444-444444444444") == 0) {
+            found_compressed = true;
+            assert(strcmp(codex_list.items[i].workspace, codex_compressed_workspace) == 0);
+            assert(strcmp(codex_list.items[i].summary, "Compressed Codex session") == 0);
+        }
+    }
+    assert(found_codex);
+    assert(found_archived);
+    if (have_zstd) assert(found_compressed);
     session_list_free(&codex_list);
     config_destroy(&codex_cfg);
 

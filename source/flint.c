@@ -42,10 +42,22 @@ void session_list_init(session_list_t *list) {
 void session_list_add(session_list_t *list, const session_t *session) {
     if (!list || !session) return;
 
-    /* Deduplicate: if workspace and tool match, update to the most recent */
+    /* Deduplicate by tool and session id. Different sessions in the same
+     * workspace are distinct and should all remain resumable. If an adapter
+     * has no id, fall back to workspace+tool deduplication. */
     for (size_t i = 0; i < list->count; i++) {
-        if (strcmp(list->items[i].workspace, session->workspace) == 0 &&
-            strcmp(list->items[i].tool_cmd, session->tool_cmd) == 0) {
+        bool same_tool = strcmp(list->items[i].tool_cmd, session->tool_cmd) == 0;
+        bool same_session = false;
+
+        if (same_tool) {
+            if (session->id[0] != '\0' && list->items[i].id[0] != '\0') {
+                same_session = strcmp(list->items[i].id, session->id) == 0;
+            } else {
+                same_session = strcmp(list->items[i].workspace, session->workspace) == 0;
+            }
+        }
+
+        if (same_session) {
             if (session->last_active > list->items[i].last_active) {
                 list->items[i] = *session;
             }

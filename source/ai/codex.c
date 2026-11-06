@@ -1,6 +1,7 @@
 #include "ai_adapter.h"
 #include "../util/fs.h"
 #include "../util/json.h"
+#include "../util/exec.h"
 #include "../config/config.h"
 #include "../git/git.h"
 #include "../process/proc.h"
@@ -155,10 +156,14 @@ static void codex_filename_id(const char *name, char *out, size_t out_size) {
     out[0] = '\0';
 
     size_t len = strlen(name);
-    const char *suffix = ".jsonl";
-    size_t suffix_len = strlen(suffix);
-    if (len >= suffix_len && strcmp(name + len - suffix_len, suffix) == 0) {
-        len -= suffix_len;
+    const char *compressed_suffix = ".jsonl.zst";
+    const char *plain_suffix = ".jsonl";
+    if (len >= strlen(compressed_suffix) &&
+        strcmp(name + len - strlen(compressed_suffix), compressed_suffix) == 0) {
+        len -= strlen(compressed_suffix);
+    } else if (len >= strlen(plain_suffix) &&
+               strcmp(name + len - strlen(plain_suffix), plain_suffix) == 0) {
+        len -= strlen(plain_suffix);
     }
 
     if (len >= 36) {
@@ -197,6 +202,40 @@ typedef struct {
 
 static int codex_dir_cb(const char *parent, const char *entry_name, bool is_dir, void *userdata);
 
+static char *codex_read_head(const char *path, size_t *out_size) {
+    if (!path) return NULL;
+
+    if (!str_has_suffix(path, ".zst")) {
+        return fs_read_head(path, CODEX_HEAD_BYTES, out_size);
+    }
+
+    char quoted[MAX_PATH_LEN * 2];
+    exec_shell_quote(path, quoted, sizeof(quoted));
+
+    char cmd[MAX_PATH_LEN * 2 + 128];
+#ifdef _WIN32
+    snprintf(cmd, sizeof(cmd), "zstd -dc -- %s", quoted);
+#else
+    snprintf(cmd, sizeof(cmd), "zstd -dc -- %s 2>/dev/null | head -c %d",
+             quoted, (int)CODEX_HEAD_BYTES);
+#endif
+
+    char *output = exec_capture(cmd);
+    if (!output || output[0] == '\0') {
+        free(output);
+        return NULL;
+    }
+
+#ifdef _WIN32
+    if (strlen(output) > CODEX_HEAD_BYTES) {
+        output[CODEX_HEAD_BYTES] = '\0';
+    }
+#endif
+
+    if (out_size) *out_size = strlen(output);
+    return output;
+}
+
 static bool codex_add_rollout(const char *path, const char *name, codex_scan_t *scan) {
     if (scan->files_scanned >= CODEX_MAX_FILES) return false;
     scan->files_scanned++;
@@ -205,7 +244,7 @@ static bool codex_add_rollout(const char *path, const char *name, codex_scan_t *
     if (mtime < scan->cutoff_time) return true;
 
     size_t size = 0;
-    char *content = fs_read_head(path, CODEX_HEAD_BYTES, &size);
+    char *content = codex_read_head(path, &size);
     if (!content) return true;
 
     codex_head_t head;
@@ -266,29 +305,41 @@ static int codex_dir_cb(const char *parent, const char *entry_name, bool is_dir,
         return 0;
     }
 
-    if (!str_has_suffix(entry_name, ".jsonl")) return 0;
+    if (!str_has_suffix(entry_name, ".jsonl") &&
+        !str_has_suffix(entry_name, ".jsonl.zst")) {
+        return 0;
+    }
     codex_add_rollout(full_path, entry_name, scan);
     return 0;
+}
+
+static void codex_scan_root(const char *root, const flint_config_t *cfg,
+                            int lookback_hours, time_t cutoff_time,
+                            session_list_t *list) {
+    if (!fs_dir_exists(root)) return;
+
+    codex_scan_t scan;
+    memset(&scan, 0, sizeof(scan));
+    scan.cfg = cfg;
+    scan.lookback_hours = lookback_hours;
+    scan.cutoff_time = cutoff_time;
+    scan.list = list;
+    fs_list_dir(root, codex_dir_cb, &scan);
 }
 
 static int codex_discover(const flint_config_t *cfg, int lookback_hours, session_list_t *list) {
     char codex_dir[MAX_PATH_LEN];
     char sessions_dir[MAX_PATH_LEN];
+    char archived_dir[MAX_PATH_LEN];
     codex_home_dir(codex_dir, sizeof(codex_dir));
     fs_path_join(codex_dir, "sessions", sessions_dir, sizeof(sessions_dir));
+    fs_path_join(codex_dir, "archived_sessions", archived_dir, sizeof(archived_dir));
 
     time_t now = time(NULL);
     time_t cutoff = now - (lookback_hours * 3600);
 
-    if (fs_dir_exists(sessions_dir)) {
-        codex_scan_t scan;
-        memset(&scan, 0, sizeof(scan));
-        scan.cfg = cfg;
-        scan.lookback_hours = lookback_hours;
-        scan.cutoff_time = cutoff;
-        scan.list = list;
-        fs_list_dir(sessions_dir, codex_dir_cb, &scan);
-    }
+    codex_scan_root(sessions_dir, cfg, lookback_hours, cutoff, list);
+    codex_scan_root(archived_dir, cfg, lookback_hours, cutoff, list);
 
     return 0;
 }

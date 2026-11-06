@@ -36,6 +36,7 @@ RELEASE_CMD=$(CC) $(FLAGS) -O3 $(WIN_SOURCE) $(WIN_TARGET) # \
 DEBUG_CMD=$(CC) $(FLAGS) -g $(WIN_SOURCE) $(WIN_TARGET) # \
 MEMDEBUG_CMD=$(CC) $(FLAGS) -g -fsanitize=address $(WIN_SOURCE) $(WIN_TARGET) # \
 TEST_CMD=$(CC) $(FLAGS) -DTEST_MODE tests\test_flint.c $(WIN_SOURCE) -o test_flint.exe && test_flint.exe && $(RM) test_flint.exe # \
+BENCH_CMD=python3 bench\bench.py # \
 !ELSE
 # -------------------- make (Linux/macOS/BSD) configuration --------------------
 CP=cp -f
@@ -49,6 +50,7 @@ RELEASE_CMD=$(CC) $(FLAGS) -O3 $(POSIX_SOURCE) -o $(TITLE)
 DEBUG_CMD=$(CC) $(FLAGS) -g $(POSIX_SOURCE) -o $(TITLE)
 MEMDEBUG_CMD=$(CC) $(FLAGS) -g -fsanitize=address $(POSIX_SOURCE) -o $(TITLE)
 TEST_CMD=$(CC) $(FLAGS) -DTEST_MODE tests/test_flint.c $(POSIX_SOURCE) -o test_flint && ./test_flint && $(RM) test_flint
+BENCH_CMD=python3 bench/bench.py
 
 # \
 !ENDIF
@@ -79,3 +81,6 @@ memdebug: $(DEPS)
 
 test: $(DEPS)
 	$(TEST_CMD)
+
+benchmark: $(TITLE)
+	$(BENCH_CMD) $(BENCH_ARGS)

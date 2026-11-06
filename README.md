@@ -22,10 +22,12 @@ Flint is adapter-based: each tool is discovered, resumed, and used for MCP focus
 | :--- | :--- | :--- |
 | **Antigravity CLI** | `agy` | `~/.gemini/antigravity-cli/brain/` transcripts & logs |
 | **Claude Code** | `claude` | `~/.claude/projects/<project>/<session-id>.jsonl` transcripts |
-| **ChatGPT Codex** | `codex` | `$CODEX_HOME/sessions/YYYY/MM/DD/rollout-*.jsonl` (default `~/.codex`) |
+| **ChatGPT Codex** | `codex` | `$CODEX_HOME/sessions/` and `archived_sessions/` rollout files (`.jsonl` / `.jsonl.zst`) |
 | **Cline** | `cline` | `~/.cline/data/sessions/` session metadata & messages |
 | **OpenCode** | `opencode` | Local OpenCode session API (`opencode api session.list`) |
 | **OpenClaw** | `openclaw` | `openclaw sessions --json` session store & `openclaw resume <key>` |
+
+Compressed Codex rollouts (`.jsonl.zst`) are read via `zstd` when it is available on `PATH`.
 
 ### Messaging Clients & MCP Tools
 
@@ -69,6 +71,12 @@ make
 
 # Run unit tests
 make test
+
+# Repeatable wall-clock benchmark (5 runs per scenario)
+make benchmark
+
+# More runs or JSON output
+make benchmark BENCH_ARGS="--runs 10 --json"
 
 # Debug build with symbols
 make debug
