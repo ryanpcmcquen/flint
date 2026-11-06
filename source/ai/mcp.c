@@ -101,6 +101,140 @@ static void append_server(char *out, size_t out_size, const char *name) {
     out[used + name_len] = '\0';
 }
 
+static bool mcp_json_has_nonempty_block(const char *json, const char *key) {
+    if (!json || !key) return false;
+
+    size_t size = strlen(json) + 1;
+    char *block = (char *)malloc(size);
+    if (!block) return false;
+
+    bool found = false;
+    block[0] = '\0';
+    if (json_get_block(json, key, block, size)) {
+        const char *start = block;
+        while (*start && isspace((unsigned char)*start)) start++;
+        size_t len = strlen(start);
+        while (len > 0 && isspace((unsigned char)start[len - 1])) len--;
+        found = len > 2;
+    }
+
+    free(block);
+    return found;
+}
+
+static bool mcp_file_has_nonempty_block(const char *path, const char *key) {
+    size_t size = 0;
+    char *content = fs_read_file(path, &size);
+    if (!content) return false;
+
+    bool found = mcp_json_has_nonempty_block(content, key);
+    free(content);
+    return found;
+}
+
+static bool mcp_file_has_nested_block(const char *path, const char *outer, const char *inner) {
+    size_t size = 0;
+    char *content = fs_read_file(path, &size);
+    if (!content) return false;
+
+    size_t block_size = strlen(content) + 1;
+    char *block = (char *)malloc(block_size);
+    bool found = false;
+    if (block) {
+        block[0] = '\0';
+        if (json_get_block(content, outer, block, block_size)) {
+            found = mcp_json_has_nonempty_block(block, inner);
+        }
+        free(block);
+    }
+
+    free(content);
+    return found;
+}
+
+static bool mcp_file_has_content(const char *path) {
+    size_t size = 0;
+    char *content = fs_read_file(path, &size);
+    if (!content) return false;
+
+    bool found = false;
+    for (size_t i = 0; i < size; i++) {
+        if (!isspace((unsigned char)content[i])) {
+            found = true;
+            break;
+        }
+    }
+
+    free(content);
+    return found;
+}
+
+static bool mcp_host_may_have_servers(const char *host_id, const char *workspace) {
+    if (mcp_id_equals(host_id, "opencode")) {
+        return true;
+    }
+
+    if (mcp_id_equals(host_id, "agy")) {
+        char path[MAX_PATH_LEN];
+        fs_expand_path("~/.gemini/config/mcp_config.json", path, sizeof(path));
+        return mcp_file_has_nonempty_block(path, "mcpServers");
+    }
+
+    if (mcp_id_equals(host_id, "cline")) {
+        char path[MAX_PATH_LEN];
+        const char *override = getenv("CLINE_MCP_SETTINGS_PATH");
+        if (override && override[0] != '\0') {
+            fs_expand_path(override, path, sizeof(path));
+        } else {
+            fs_expand_path("~/.cline/data/settings/cline_mcp_settings.json", path, sizeof(path));
+        }
+        return mcp_file_has_nonempty_block(path, "mcpServers");
+    }
+
+    if (mcp_id_equals(host_id, "openclaw")) {
+        char path[MAX_PATH_LEN];
+        fs_expand_path("~/.openclaw/openclaw.json", path, sizeof(path));
+        return mcp_file_has_nested_block(path, "mcp", "servers");
+    }
+
+    if (mcp_id_equals(host_id, "claude")) {
+        char path[MAX_PATH_LEN];
+        fs_expand_path("~/.claude.json", path, sizeof(path));
+        if (mcp_file_has_nonempty_block(path, "mcpServers")) {
+            return true;
+        }
+
+        if (workspace && workspace[0] != '\0') {
+            fs_path_join(workspace, ".mcp.json", path, sizeof(path));
+            if (mcp_file_has_nonempty_block(path, "mcpServers")) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    if (mcp_id_equals(host_id, "codex")) {
+        char codex_home[MAX_PATH_LEN];
+        char path[MAX_PATH_LEN];
+        const char *env_home = getenv("CODEX_HOME");
+        if (env_home && env_home[0] != '\0') {
+            strncpy(codex_home, env_home, sizeof(codex_home) - 1);
+            codex_home[sizeof(codex_home) - 1] = '\0';
+        } else {
+            fs_expand_path("~/.codex", codex_home, sizeof(codex_home));
+        }
+        fs_path_join(codex_home, "config.toml", path, sizeof(path));
+        return mcp_file_has_content(path);
+    }
+
+    return true;
+}
+
+static bool mcp_host_needs_workspace(const char *host_id) {
+    return mcp_id_equals(host_id, "opencode");
+}
+
 bool mcp_parse_connected_servers(const char *json, char *out, size_t out_size) {
     if (!json || !out || out_size == 0) return false;
     out[0] = '\0';
@@ -812,6 +946,26 @@ static int mcp_preferred_host_index(const flint_config_t *cfg, const session_lis
     return preferred;
 }
 
+static bool mcp_fill_target(mcp_target_t *out, const mcp_host_info_t *host,
+                            const char *servers, const char *workspace) {
+    if (!out || !host || !servers || !workspace) return false;
+
+    strncpy(out->host_id, host->id, sizeof(out->host_id) - 1);
+    strncpy(out->host_name, host->name, sizeof(out->host_name) - 1);
+    strncpy(out->servers, servers, sizeof(out->servers) - 1);
+    strncpy(out->workspace, workspace, sizeof(out->workspace) - 1);
+    strncpy(out->server_name, servers, sizeof(out->server_name) - 1);
+    out->host_id[sizeof(out->host_id) - 1] = '\0';
+    out->host_name[sizeof(out->host_name) - 1] = '\0';
+    out->servers[sizeof(out->servers) - 1] = '\0';
+    out->workspace[sizeof(out->workspace) - 1] = '\0';
+    out->server_name[sizeof(out->server_name) - 1] = '\0';
+
+    char *comma = strchr(out->server_name, ',');
+    if (comma) *comma = '\0';
+    return true;
+}
+
 bool mcp_detect_connected(const flint_config_t *cfg, const session_list_t *list,
                           mcp_target_t *out) {
     if (!out) return false;
@@ -838,22 +992,25 @@ bool mcp_detect_connected(const flint_config_t *cfg, const session_list_t *list,
         const mcp_host_info_t *host = &MCP_HOSTS[order[i]];
         if (!exec_command_exists(host->binary)) continue;
 
-        for (size_t w = 0; w < workspace_count; w++) {
-            char servers[512] = {0};
-            if (!mcp_list_servers_for_host(host->id, workspaces[w].path,
-                                           servers, sizeof(servers))) {
-                continue;
-            }
+        if (!pinned &&
+            !mcp_host_may_have_servers(host->id, workspaces[0].path)) {
+            continue;
+        }
 
-            strncpy(out->host_id, host->id, sizeof(out->host_id) - 1);
-            strncpy(out->host_name, host->name, sizeof(out->host_name) - 1);
-            strncpy(out->servers, servers, sizeof(out->servers) - 1);
-            strncpy(out->workspace, workspaces[w].path, sizeof(out->workspace) - 1);
-            strncpy(out->server_name, servers, sizeof(out->server_name) - 1);
-            out->server_name[sizeof(out->server_name) - 1] = '\0';
-            char *comma = strchr(out->server_name, ',');
-            if (comma) *comma = '\0';
-            return true;
+        if (mcp_host_needs_workspace(host->id)) {
+            for (size_t w = 0; w < workspace_count; w++) {
+                char servers[512] = {0};
+                if (mcp_list_servers_for_host(host->id, workspaces[w].path,
+                                              servers, sizeof(servers))) {
+                    return mcp_fill_target(out, host, servers, workspaces[w].path);
+                }
+            }
+        } else {
+            char servers[512] = {0};
+            if (mcp_list_servers_for_host(host->id, workspaces[0].path,
+                                          servers, sizeof(servers))) {
+                return mcp_fill_target(out, host, servers, workspaces[0].path);
+            }
         }
     }
 
@@ -930,6 +1087,10 @@ bool flint_mcp_parse_result(const char *host_id, const char *output,
 bool flint_mcp_build_prompt_command(const char *host_id, const char *workspace,
                                     const char *prompt, char *out, size_t out_size) {
     return mcp_build_prompt_command(host_id, workspace, prompt, out, out_size);
+}
+
+bool flint_mcp_host_may_have_servers(const char *host_id, const char *workspace) {
+    return mcp_host_may_have_servers(host_id, workspace);
 }
 
 const char *flint_mcp_preferred_host(const flint_config_t *cfg, const session_list_t *list) {

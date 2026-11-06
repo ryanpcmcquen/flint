@@ -42,7 +42,7 @@ AI chat inside messaging clients (Slack, Microsoft Teams, Discord, WhatsApp, and
 | `opencode` | `opencode api mcp.list` | `opencode run --agent plan --format json` |
 | `openclaw` | `openclaw mcp status --json` | `openclaw agent exec --json` |
 
-By default, Flint uses the host from your most recent session. If that host has no configured MCP servers, it falls back through the other installed adapters. Pin one explicitly with `mcp_host = <name>`; if no host has a connected server, MCP focus is skipped cleanly. The core brief, focus ranking, session discovery, and resume features work without any MCP host installed.
+By default, Flint uses the host from your most recent session. If that host has no configured MCP servers, it falls back through the other installed adapters. Pin one explicitly with `mcp_host = <name>`; if no host has a connected server, MCP focus is skipped cleanly. Flint checks local MCP configuration first, so unconfigured hosts are skipped without launching their CLIs, and global server lists are queried at most once per run. The core brief, focus ranking, session discovery, and resume features work without any MCP host installed.
 
 Set `mcp_focus = false` in `~/.config/flint/config` to disable this feature.
 

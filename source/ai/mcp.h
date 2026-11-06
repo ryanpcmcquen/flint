@@ -29,6 +29,7 @@ bool flint_mcp_parse_result(const char *host_id, const char *output,
                             char *out, size_t out_size, char *session_id_out);
 bool flint_mcp_build_prompt_command(const char *host_id, const char *workspace,
                                     const char *prompt, char *out, size_t out_size);
+bool flint_mcp_host_may_have_servers(const char *host_id, const char *workspace);
 const char *flint_mcp_preferred_host(const flint_config_t *cfg, const session_list_t *list);
 #endif
 
