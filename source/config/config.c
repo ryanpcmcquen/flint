@@ -22,8 +22,8 @@ void config_init_defaults(flint_config_t *cfg) {
      * the tool's section in the config file to prepend a launcher like
      * GrapeRoot (which normally wraps `agy`) around the command. */
     config_add_tool(cfg, "agy", "", "gemini-3.8-flash", "high");
-    config_add_tool(cfg, "claude", "", "claude-3-7-sonnet", "high");
-    config_add_tool(cfg, "codex", "", "o3-mini", "high");
+    config_add_tool(cfg, "claude", "", "", "high");
+    config_add_tool(cfg, "codex", "", "", "high");
     config_add_tool(cfg, "cline", "", "", "");
     config_add_tool(cfg, "opencode", "", "", "");
     config_add_tool(cfg, "openclaw", "", "", "");
@@ -110,6 +110,9 @@ void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
         if (tc && tc->model[0] != '\0') {
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --model %s", tc->model);
         }
+        if (tc && tc->effort[0] != '\0') {
+            snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --effort %s", tc->effort);
+        }
         snprintf(out_cmd, out_size, "%sclaude%s", prefix, flags);
     } else if (strcmp(tool_cmd, "codex") == 0) {
         char flags[512] = {0};
@@ -118,6 +121,10 @@ void config_format_tool_cmd(const flint_config_t *cfg, const char *tool_cmd,
         }
         if (tc && tc->model[0] != '\0') {
             snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags), " --model %s", tc->model);
+        }
+        if (tc && tc->effort[0] != '\0') {
+            snprintf(flags + strlen(flags), sizeof(flags) - strlen(flags),
+                     " -c model_reasoning_effort=%s", tc->effort);
         }
         snprintf(out_cmd, out_size, "%scodex%s", prefix, flags);
     } else if (strcmp(tool_cmd, "cline") == 0) {
@@ -341,18 +348,20 @@ bool config_create_default_file(const char *path) {
     fprintf(f, "#   model = gemini-3.8-flash\n");
     fprintf(f, "#   effort = high\n");
     fprintf(f, "#\n");
-    fprintf(f, "# Leave wrapper blank to run the CLI without a launcher.\n\n");
+    fprintf(f, "# Leave wrapper blank to run the CLI without a launcher.\n");
+    fprintf(f, "# Leave model blank to use the CLI/session default; this is recommended\n");
+    fprintf(f, "# for Claude and Codex so resume keeps the model saved in the session.\n\n");
     fprintf(f, "[agy]\n");
     fprintf(f, "wrapper = \n");
     fprintf(f, "model = gemini-3.8-flash\n");
     fprintf(f, "effort = high\n\n");
     fprintf(f, "[claude]\n");
     fprintf(f, "wrapper = \n");
-    fprintf(f, "model = claude-3-7-sonnet\n");
+    fprintf(f, "model = \n");
     fprintf(f, "effort = high\n\n");
     fprintf(f, "[codex]\n");
     fprintf(f, "wrapper = \n");
-    fprintf(f, "model = o3-mini\n");
+    fprintf(f, "model = \n");
     fprintf(f, "effort = high\n\n");
     fprintf(f, "[cline]\n");
     fprintf(f, "wrapper = \n");

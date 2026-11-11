@@ -225,12 +225,12 @@ effort = high
 
 [claude]
 wrapper =
-model = claude-3-7-sonnet
+model =
 effort = high
 
 [codex]
 wrapper =
-model = o3-mini
+model =
 effort = high
 
 [cline]
@@ -250,7 +250,7 @@ effort =
 ```
 
 - `wrapper` — launcher binary prepended to the resume command (e.g. `graperoot`); blank means run the raw CLI. The CLI flag `--wrapper <name>` overrides this for every tool at runtime.
-- `model` / `effort` — model and effort passed to the AI CLI.
+- `model` / `effort` — model and effort passed to the AI CLI. Leave `model` blank to use the CLI/session default; this is recommended for Claude and Codex so resume keeps the model saved in the session.
 
 ---
 

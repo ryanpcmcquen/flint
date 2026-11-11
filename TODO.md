@@ -1,10 +1,11 @@
 # Flint TODO
 
-Status reviewed against the code on 2026-11-06. `make` builds cleanly and `make test` passes (70/70).
+Status reviewed against the code on 2026-11-11. `make` builds cleanly and `make test` passes (70/70).
 
 ## Original items
 
-- [ ] **Verify Claude/Codex resume with real installs.** Discovery, session-id parsing, and resume-command formatting are covered by docs and fixtures, but neither CLI is installed on this machine. Run `flint -r -n` and then a real `claude --resume <id>` / `codex resume <id>` once both are available.
+- [ ] **Verify Claude/Codex resume with real installs.** Both CLIs are installed now (`claude` 2.1.311, `codex` 0.167.x), but neither is authenticated yet. After `claude auth login` and `codex login`, create a session with each, confirm `flint -r -n` discovers it, then run the real resume command.
+- [x] **Claude/Codex command parity (2026-11-11).** Claude and Codex no longer receive hardcoded default models, so resume keeps the model saved in the session. Claude now uses its documented `--effort` flag; Codex uses `-c model_reasoning_effort=...`. MCP server discovery now runs Claude/Codex in the target workspace so project-scoped `.mcp.json` / `.codex/config.toml` servers are visible, and the Codex config gate checks project config too.
 - [x] **Resume the session (don't just relaunch).** DONE for the installed adapters. Resume command wiring completed this round: `agy` emits ` --conversation <ID>`, `claude` emits ` --resume <ID>`, and `codex` emits ` resume <ID>` when a session id is present (tests added; `make test` 28/28). PR #1 conflicts resolved via merge of `origin/main` (merge commit `8a0e677`); resume end-to-end still blocked on real CLI installs / session ids.
   - `config_format_tool_cmd()` in `source/config/config.c` takes `session_id` but the `agy` branch ignored it. Fixed: the `agy` branch now emits ` --conversation <session_id>` when a session id is present, so the resume command becomes `[wrapper] agy --conversation <ID> --model ... --effort ...`. The `claude` branch now emits ` --resume <session_id>` and the `codex` branch emits ` resume <session_id>` when a session id is present.
   - `agy` has `--conversation <ID>` ("Resume a previous conversation by ID") and `--continue`. I confirmed this with `agy --help`. Antigravity's `session.id` is the brain directory name, so it should be usable as the ID. Not yet tested against a real resume.

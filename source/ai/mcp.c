@@ -225,14 +225,27 @@ static bool mcp_host_may_have_servers(const char *host_id, const char *workspace
             fs_expand_path("~/.codex", codex_home, sizeof(codex_home));
         }
         fs_path_join(codex_home, "config.toml", path, sizeof(path));
-        return mcp_file_has_content(path);
+        if (mcp_file_has_content(path)) {
+            return true;
+        }
+
+        if (workspace && workspace[0] != '\0') {
+            char project_dir[MAX_PATH_LEN];
+            fs_path_join(workspace, ".codex", project_dir, sizeof(project_dir));
+            fs_path_join(project_dir, "config.toml", path, sizeof(path));
+            return mcp_file_has_content(path);
+        }
+
+        return false;
     }
 
     return true;
 }
 
 static bool mcp_host_needs_workspace(const char *host_id) {
-    return mcp_id_equals(host_id, "opencode");
+    return mcp_id_equals(host_id, "claude") ||
+           mcp_id_equals(host_id, "codex") ||
+           mcp_id_equals(host_id, "opencode");
 }
 
 bool mcp_parse_connected_servers(const char *json, char *out, size_t out_size) {
@@ -828,11 +841,17 @@ static bool mcp_list_servers_for_host(const char *host_id, const char *workspace
     if (mcp_id_equals(host_id, "agy")) {
         snprintf(cmd, sizeof(cmd), "agy mcp list");
     } else if (mcp_id_equals(host_id, "claude")) {
-        snprintf(cmd, sizeof(cmd), "claude mcp list");
+        char quoted_workspace[MAX_PATH_LEN * 2];
+        exec_shell_quote((workspace && workspace[0]) ? workspace : ".",
+                         quoted_workspace, sizeof(quoted_workspace));
+        snprintf(cmd, sizeof(cmd), "cd %s && claude mcp list", quoted_workspace);
     } else if (mcp_id_equals(host_id, "cline")) {
         snprintf(cmd, sizeof(cmd), "cline config mcp --json");
     } else if (mcp_id_equals(host_id, "codex")) {
-        snprintf(cmd, sizeof(cmd), "codex mcp list --json");
+        char quoted_workspace[MAX_PATH_LEN * 2];
+        exec_shell_quote((workspace && workspace[0]) ? workspace : ".",
+                         quoted_workspace, sizeof(quoted_workspace));
+        snprintf(cmd, sizeof(cmd), "cd %s && codex mcp list --json", quoted_workspace);
     } else if (mcp_id_equals(host_id, "opencode")) {
         char param[MAX_PATH_LEN + 64];
         snprintf(param, sizeof(param), "location[directory]=%s",
@@ -992,13 +1011,18 @@ bool mcp_detect_connected(const flint_config_t *cfg, const session_list_t *list,
         const mcp_host_info_t *host = &MCP_HOSTS[order[i]];
         if (!exec_command_exists(host->binary)) continue;
 
-        if (!pinned &&
+        bool needs_workspace = mcp_host_needs_workspace(host->id);
+        if (!needs_workspace && !pinned &&
             !mcp_host_may_have_servers(host->id, workspaces[0].path)) {
             continue;
         }
 
-        if (mcp_host_needs_workspace(host->id)) {
+        if (needs_workspace) {
             for (size_t w = 0; w < workspace_count; w++) {
+                if (!pinned &&
+                    !mcp_host_may_have_servers(host->id, workspaces[w].path)) {
+                    continue;
+                }
                 char servers[512] = {0};
                 if (mcp_list_servers_for_host(host->id, workspaces[w].path,
                                               servers, sizeof(servers))) {
