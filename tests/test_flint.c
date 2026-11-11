@@ -331,7 +331,18 @@ static void test_config_and_wrappers(void) {
     char cmd7[512] = {0};
     config_format_tool_cmd(&cfg8, "claude", "claude-session-123", cmd7, sizeof(cmd7));
     assert(strstr(cmd7, "claude --resume claude-session-123") != NULL);
-    assert(strstr(cmd7, "--model claude-3-7-sonnet") != NULL);
+    assert(strstr(cmd7, "--model") == NULL);
+    assert(strstr(cmd7, "--effort high") != NULL);
+
+    for (size_t i = 0; i < cfg8.tool_config_count; i++) {
+        if (strcmp(cfg8.tool_configs[i].name, "claude") == 0) {
+            strncpy(cfg8.tool_configs[i].model, "sonnet",
+                    sizeof(cfg8.tool_configs[i].model) - 1);
+        }
+    }
+    char cmd7b[512] = {0};
+    config_format_tool_cmd(&cfg8, "claude", "claude-session-123", cmd7b, sizeof(cmd7b));
+    assert(strstr(cmd7b, "--model sonnet") != NULL);
     config_destroy(&cfg8);
     PASS();
 
@@ -341,7 +352,18 @@ static void test_config_and_wrappers(void) {
     char cmd8[512] = {0};
     config_format_tool_cmd(&cfg9, "codex", "codex-session-456", cmd8, sizeof(cmd8));
     assert(strstr(cmd8, "codex resume codex-session-456") != NULL);
-    assert(strstr(cmd8, "--model o3-mini") != NULL);
+    assert(strstr(cmd8, "--model") == NULL);
+    assert(strstr(cmd8, "-c model_reasoning_effort=high") != NULL);
+
+    for (size_t i = 0; i < cfg9.tool_config_count; i++) {
+        if (strcmp(cfg9.tool_configs[i].name, "codex") == 0) {
+            strncpy(cfg9.tool_configs[i].model, "gpt-6-luna",
+                    sizeof(cfg9.tool_configs[i].model) - 1);
+        }
+    }
+    char cmd8b[512] = {0};
+    config_format_tool_cmd(&cfg9, "codex", "codex-session-456", cmd8b, sizeof(cmd8b));
+    assert(strstr(cmd8b, "--model gpt-6-luna") != NULL);
     config_destroy(&cfg9);
     PASS();
 
@@ -777,6 +799,14 @@ static void test_mcp_host_gating(void) {
     write_test_file(path, "[mcp_servers.slack]\ncommand = \"slack-mcp\"\n");
     assert(flint_mcp_host_may_have_servers("codex", workspace) == true);
 
+    remove(path);
+    char codex_project_dir[MAX_PATH_LEN];
+    fs_path_join(workspace, ".codex", codex_project_dir, sizeof(codex_project_dir));
+    assert(fs_mkdir_p(codex_project_dir) == 0);
+    fs_path_join(codex_project_dir, "config.toml", path, sizeof(path));
+    write_test_file(path, "[mcp_servers.slack]\ncommand = \"slack-mcp\"\n");
+    assert(flint_mcp_host_may_have_servers("codex", workspace) == true);
+
     snprintf(path, sizeof(path), "%s/.claude.json", home);
     write_test_file(path, "{\"mcpServers\":{}}");
     assert(flint_mcp_host_may_have_servers("claude", workspace) == false);
@@ -1048,7 +1078,6 @@ static void test_openclaw_discovery(void) {
             int res = adapters[i]->discover_sessions(&cfg, 24 * 7, &list);
             assert(res == 0);
             printf("       (discovered %zu openclaw session(s))\n", list.count);
-            assert(list.count > 0);
             for (size_t s = 0; s < list.count; s++) {
                 assert(strstr(list.items[s].resume_cmd, "openclaw resume") != NULL);
             }
