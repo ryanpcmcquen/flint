@@ -791,10 +791,13 @@ static const ai_adapter_t *find_test_adapter(const char *binary) {
 static void test_mcp_host_gating(void) {
     TEST("mcp host gating skips unconfigured hosts");
     char old_home[MAX_PATH_LEN] = {0};
+    char old_userprofile[MAX_PATH_LEN] = {0};
     char old_codex_home[MAX_PATH_LEN] = {0};
     const char *home_env = getenv("HOME");
+    const char *userprofile_env = getenv("USERPROFILE");
     const char *codex_env = getenv("CODEX_HOME");
     if (home_env) strncpy(old_home, home_env, sizeof(old_home) - 1);
+    if (userprofile_env) strncpy(old_userprofile, userprofile_env, sizeof(old_userprofile) - 1);
     if (codex_env) strncpy(old_codex_home, codex_env, sizeof(old_codex_home) - 1);
 
     char root[MAX_PATH_LEN];
@@ -806,6 +809,7 @@ static void test_mcp_host_gating(void) {
     assert(fs_mkdir_p(home) == 0);
     assert(fs_mkdir_p(workspace) == 0);
     setenv("HOME", home, 1);
+    setenv("USERPROFILE", home, 1);
 
     char path[MAX_PATH_LEN];
     char dir[MAX_PATH_LEN];
@@ -870,6 +874,11 @@ static void test_mcp_host_gating(void) {
     } else {
         unsetenv("HOME");
     }
+    if (old_userprofile[0] != '\0') {
+        setenv("USERPROFILE", old_userprofile, 1);
+    } else {
+        unsetenv("USERPROFILE");
+    }
 
     char cleanup[MAX_PATH_LEN + 32];
     snprintf(cleanup, sizeof(cleanup), "rm -rf '%s'", root);
@@ -880,10 +889,13 @@ static void test_mcp_host_gating(void) {
 static void test_claude_codex_discovery(void) {
     TEST("claude discovery from ~/.claude/projects");
     char old_home[MAX_PATH_LEN] = {0};
+    char old_userprofile[MAX_PATH_LEN] = {0};
     char old_codex_home[MAX_PATH_LEN] = {0};
     const char *home_env = getenv("HOME");
+    const char *userprofile_env = getenv("USERPROFILE");
     const char *codex_env = getenv("CODEX_HOME");
     if (home_env) strncpy(old_home, home_env, sizeof(old_home) - 1);
+    if (userprofile_env) strncpy(old_userprofile, userprofile_env, sizeof(old_userprofile) - 1);
     if (codex_env) strncpy(old_codex_home, codex_env, sizeof(old_codex_home) - 1);
 
     char root[MAX_PATH_LEN];
@@ -911,6 +923,7 @@ static void test_claude_codex_discovery(void) {
     write_test_file(claude_file, claude_fixture);
 
     setenv("HOME", home, 1);
+    setenv("USERPROFILE", home, 1);
 
     const ai_adapter_t *claude = find_test_adapter("claude");
     assert(claude != NULL);
@@ -1050,6 +1063,11 @@ static void test_claude_codex_discovery(void) {
         setenv("HOME", old_home, 1);
     } else {
         unsetenv("HOME");
+    }
+    if (old_userprofile[0] != '\0') {
+        setenv("USERPROFILE", old_userprofile, 1);
+    } else {
+        unsetenv("USERPROFILE");
     }
 
     char cleanup[MAX_PATH_LEN + 32];
