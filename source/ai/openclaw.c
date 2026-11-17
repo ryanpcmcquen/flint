@@ -6,6 +6,9 @@
 #include "../git/git.h"
 #include "../process/proc.h"
 #include <string.h>
+#ifndef _WIN32
+#include <strings.h>
+#endif
 
 #define OPENCLAW_SESSIONS_JSON_MAX 8192
 

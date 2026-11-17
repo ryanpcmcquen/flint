@@ -6,6 +6,8 @@
 #ifdef _WIN32
   #include <windows.h>
   #include <tlhelp32.h>
+  #include <process.h>
+  #define getpid _getpid
 #else
   #include <unistd.h>
 #endif
@@ -165,8 +167,8 @@ bool proc_is_session_running(const char *tool_cmd, const char *workspace_path) {
 
     if (Process32First(hSnapshot, &pe)) {
         do {
-            if (strcasecmp(pe.szExeFile, target_exe) == 0 ||
-                strcasecmp(pe.szExeFile, tool_cmd) == 0) {
+            if (proc_case_eq(pe.szExeFile, target_exe) ||
+                proc_case_eq(pe.szExeFile, tool_cmd)) {
                 found = true;
                 break;
             }
