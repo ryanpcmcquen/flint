@@ -15,6 +15,17 @@
 #include "../source/journal/journal.h"
 #include "../source/process/proc.h"
 
+#ifdef _WIN32
+static int setenv(const char *name, const char *value, int overwrite) {
+    (void)overwrite;
+    return _putenv_s(name, value);
+}
+
+static int unsetenv(const char *name) {
+    return _putenv_s(name, "");
+}
+#endif
+
 static int total_tests = 0;
 static int passed_tests = 0;
 

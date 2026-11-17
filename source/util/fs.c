@@ -122,7 +122,7 @@ bool fs_file_exists(const char *path) {
 
     struct stat st;
     if (stat(expanded, &st) == 0) {
-        return (st.st_mode & S_IFDIR) == 0;
+        return !S_ISDIR(st.st_mode);
     }
     return false;
 }
@@ -171,7 +171,7 @@ bool fs_dir_exists(const char *path) {
 
     struct stat st;
     if (stat(expanded, &st) == 0) {
-        return (st.st_mode & S_IFDIR) != 0;
+        return S_ISDIR(st.st_mode);
     }
     return false;
 }
@@ -363,7 +363,7 @@ int fs_list_dir(const char *dir_path, fs_dir_callback_t callback, void *userdata
         struct stat st;
         bool is_dir = false;
         if (stat(full, &st) == 0) {
-            is_dir = (st.st_mode & S_IFDIR) != 0;
+            is_dir = S_ISDIR(st.st_mode);
         }
 
         int res = callback(expanded, entry->d_name, is_dir, userdata);
