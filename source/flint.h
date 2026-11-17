@@ -126,6 +126,7 @@ typedef struct {
     bool resume_now;
     bool dry_run;
     int lookback_hours;
+    int resume_limit;
     char target_terminal[MAX_NAME_LEN];
     /* --wrapper: prepend to every resume command */
     char wrapper_override[MAX_NAME_LEN];
@@ -142,6 +143,7 @@ typedef struct {
 /* Session list management functions */
 void session_list_init(session_list_t *list);
 void session_list_add(session_list_t *list, const session_t *session);
+void session_list_sort_by_recency(session_list_t *list);
 void session_list_free(session_list_t *list);
 
 /* Whether a session should be included given the resume mode filter */
