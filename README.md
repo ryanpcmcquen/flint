@@ -60,6 +60,14 @@ Flint automatically detects your running terminal emulator, or allows you to tar
 
 ---
 
+## Prebuilt binaries
+
+GitHub Releases include prebuilt binaries for macOS arm64, Linux x86_64, and Windows x86_64:
+
+https://github.com/ryanpcmcquen/flint/releases
+
+---
+
 ## Building
 
 Flint uses a single, portable polyglot `Makefile` that compiles with **GNU `make`** on macOS and Linux, as well as Microsoft **`nmake`** on Windows (using Clang or MSVC).
