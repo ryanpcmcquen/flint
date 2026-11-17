@@ -52,6 +52,17 @@ static void test_temp_path(char *out, size_t out_size, const char *prefix) {
     fs_path_join(root, name, out, out_size);
 }
 
+static void test_json_escape(const char *src, char *dst, size_t dst_size) {
+    size_t w = 0;
+    for (; src && *src && w + 2 < dst_size; src++) {
+        if (*src == '\\' || *src == '"') {
+            dst[w++] = '\\';
+        }
+        dst[w++] = *src;
+    }
+    dst[w] = '\0';
+}
+
 static void test_json_primitives(void) {
     TEST("json_get_string");
     const char *json = "{\"tool\": \"antigravity\", \"version\": 2, \"active\": true}";
@@ -915,11 +926,13 @@ static void test_claude_codex_discovery(void) {
     assert(fs_mkdir_p(claude_project) == 0);
     assert(fs_mkdir_p(claude_workspace) == 0);
     char claude_fixture[2048];
+    char claude_workspace_json[MAX_PATH_LEN * 2];
+    test_json_escape(claude_workspace, claude_workspace_json, sizeof(claude_workspace_json));
     snprintf(claude_fixture, sizeof(claude_fixture),
              "{\"isSidechain\":false,\"cwd\":\"%s\","
              "\"sessionId\":\"11111111-1111-4111-8111-111111111111\",\"type\":\"user\","
              "\"message\":{\"role\":\"user\",\"content\":\"Fix the JSON parser\"}}\n",
-             claude_workspace);
+             claude_workspace_json);
     write_test_file(claude_file, claude_fixture);
 
     setenv("HOME", home, 1);
@@ -956,13 +969,15 @@ static void test_claude_codex_discovery(void) {
     assert(fs_mkdir_p(codex_day) == 0);
     assert(fs_mkdir_p(codex_workspace) == 0);
     char codex_fixture[2048];
+    char codex_workspace_json[MAX_PATH_LEN * 2];
+    test_json_escape(codex_workspace, codex_workspace_json, sizeof(codex_workspace_json));
     snprintf(codex_fixture, sizeof(codex_fixture),
              "{\"timestamp\":\"2026-11-04T12:00:00Z\",\"type\":\"session_meta\","
              "\"payload\":{\"id\":\"22222222-2222-4222-8222-222222222222\","
              "\"cwd\":\"%s\",\"git\":{\"branch\":\"main\"}}}\n"
              "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\","
              "\"message\":\"Add real Codex discovery\"}}\n",
-             codex_workspace);
+             codex_workspace_json);
     write_test_file(codex_file, codex_fixture);
 
     char codex_archived_day[MAX_PATH_LEN];
@@ -978,12 +993,15 @@ static void test_claude_codex_discovery(void) {
     assert(fs_mkdir_p(codex_archived_day) == 0);
     assert(fs_mkdir_p(codex_archived_workspace) == 0);
     char codex_archived_fixture[2048];
+    char codex_archived_workspace_json[MAX_PATH_LEN * 2];
+    test_json_escape(codex_archived_workspace, codex_archived_workspace_json,
+                     sizeof(codex_archived_workspace_json));
     snprintf(codex_archived_fixture, sizeof(codex_archived_fixture),
              "{\"type\":\"session_meta\",\"payload\":{\"id\":\"33333333-3333-4333-8333-333333333333\","
              "\"cwd\":\"%s\"}}\n"
              "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\","
              "\"message\":\"Archived Codex session\"}}\n",
-             codex_archived_workspace);
+             codex_archived_workspace_json);
     write_test_file(codex_archived_file, codex_archived_fixture);
 
     bool have_zstd = system("command -v zstd >/dev/null 2>&1") == 0;
@@ -999,12 +1017,15 @@ static void test_claude_codex_discovery(void) {
              "%s/codex-compressed-workspace", root);
     assert(fs_mkdir_p(codex_compressed_workspace) == 0);
     char codex_compressed_fixture[2048];
+    char codex_compressed_workspace_json[MAX_PATH_LEN * 2];
+    test_json_escape(codex_compressed_workspace, codex_compressed_workspace_json,
+                     sizeof(codex_compressed_workspace_json));
     snprintf(codex_compressed_fixture, sizeof(codex_compressed_fixture),
              "{\"type\":\"session_meta\",\"payload\":{\"id\":\"44444444-4444-4444-8444-444444444444\","
              "\"cwd\":\"%s\"}}\n"
              "{\"type\":\"event_msg\",\"payload\":{\"type\":\"user_message\","
              "\"message\":\"Compressed Codex session\"}}\n",
-             codex_compressed_workspace);
+             codex_compressed_workspace_json);
     write_test_file(codex_compressed_plain, codex_compressed_fixture);
     if (have_zstd) {
         char zstd_cmd[MAX_PATH_LEN * 2 + 64];
