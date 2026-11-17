@@ -2,6 +2,9 @@
 #include "../util/fs.h"
 #include <ctype.h>
 #include <string.h>
+#ifndef _WIN32
+#include <strings.h>
+#endif
 
 void config_init_defaults(flint_config_t *cfg) {
     if (!cfg) return;

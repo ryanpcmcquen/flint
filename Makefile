@@ -45,11 +45,12 @@ RM=rm -f
 CC=clang
 
 POSIX_SOURCE=source/flint.c source/*/*.c
+POSIX_FLAGS=$(FLAGS) -D_POSIX_C_SOURCE=200809L
 
-RELEASE_CMD=$(CC) $(FLAGS) -O3 $(POSIX_SOURCE) -o $(TITLE)
-DEBUG_CMD=$(CC) $(FLAGS) -g $(POSIX_SOURCE) -o $(TITLE)
-MEMDEBUG_CMD=$(CC) $(FLAGS) -g -fsanitize=address $(POSIX_SOURCE) -o $(TITLE)
-TEST_CMD=$(CC) $(FLAGS) -DTEST_MODE tests/test_flint.c $(POSIX_SOURCE) -o test_flint && ./test_flint && $(RM) test_flint
+RELEASE_CMD=$(CC) $(POSIX_FLAGS) -O3 $(POSIX_SOURCE) -o $(TITLE)
+DEBUG_CMD=$(CC) $(POSIX_FLAGS) -g $(POSIX_SOURCE) -o $(TITLE)
+MEMDEBUG_CMD=$(CC) $(POSIX_FLAGS) -g -fsanitize=address $(POSIX_SOURCE) -o $(TITLE)
+TEST_CMD=$(CC) $(POSIX_FLAGS) -DTEST_MODE tests/test_flint.c $(POSIX_SOURCE) -o test_flint && ./test_flint && $(RM) test_flint
 BENCH_CMD=python3 bench/bench.py
 
 # \

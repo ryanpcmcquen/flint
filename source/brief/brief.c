@@ -3,6 +3,9 @@
 #include "../util/fs.h"
 #include <string.h>
 #include <ctype.h>
+#ifndef _WIN32
+#include <strings.h>
+#endif
 
 static void workspace_label(const char *path, char *out, size_t out_size) {
     if (!out || out_size == 0) return;

@@ -5,6 +5,9 @@
 #include "../git/git.h"
 #include "../process/proc.h"
 #include <string.h>
+#ifndef _WIN32
+#include <strings.h>
+#endif
 
 #ifdef _WIN32
   #include <direct.h>
