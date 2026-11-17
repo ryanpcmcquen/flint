@@ -7,7 +7,7 @@
 #include <time.h>
 #include <stdbool.h>
 
-#define FLINT_VERSION "0.3.0"
+#define FLINT_VERSION "0.4.0"
 #define MAX_PATH_LEN 1024
 #define MAX_CMD_LEN 1024
 #define MAX_NAME_LEN 64
