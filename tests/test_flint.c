@@ -219,6 +219,29 @@ static void test_session_deduplication(void) {
 
     session_list_free(&multi);
     PASS();
+
+    TEST("session_list_sort_by_recency");
+    session_list_t sorted;
+    session_list_init(&sorted);
+    session_t oldest = {0};
+    oldest.last_active = 100;
+    strncpy(oldest.id, "old", sizeof(oldest.id) - 1);
+    session_list_add(&sorted, &oldest);
+    session_t newest = {0};
+    newest.last_active = 300;
+    strncpy(newest.id, "new", sizeof(newest.id) - 1);
+    session_list_add(&sorted, &newest);
+    session_t middle = {0};
+    middle.last_active = 200;
+    strncpy(middle.id, "mid", sizeof(middle.id) - 1);
+    session_list_add(&sorted, &middle);
+    session_list_sort_by_recency(&sorted);
+    assert(sorted.count == 3);
+    assert(strcmp(sorted.items[0].id, "new") == 0);
+    assert(strcmp(sorted.items[1].id, "mid") == 0);
+    assert(strcmp(sorted.items[2].id, "old") == 0);
+    session_list_free(&sorted);
+    PASS();
 }
 
 static void test_terminal_registry(void) {

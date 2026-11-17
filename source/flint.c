@@ -7,7 +7,9 @@
 #include "git/git.h"
 #include "journal/journal.h"
 #include "process/proc.h"
+#include "util/exec.h"
 #include "util/fs.h"
+#include "util/json.h"
 
 #include <stdlib.h>
 
@@ -76,6 +78,19 @@ void session_list_add(session_list_t *list, const session_t *session) {
     list->items[list->count++] = *session;
 }
 
+static int session_recency_cmp(const void *a, const void *b) {
+    const session_t *sa = (const session_t *)a;
+    const session_t *sb = (const session_t *)b;
+    if (sa->last_active < sb->last_active) return 1;
+    if (sa->last_active > sb->last_active) return -1;
+    return 0;
+}
+
+void session_list_sort_by_recency(session_list_t *list) {
+    if (!list || list->count < 2) return;
+    qsort(list->items, list->count, sizeof(session_t), session_recency_cmp);
+}
+
 void session_list_free(session_list_t *list) {
     if (!list) return;
     if (list->items) {
@@ -136,6 +151,7 @@ static void print_usage(const char *prog_name) {
     printf(ANSI_BOLD "Options:\n" ANSI_RESET);
     printf("  -s, --summary           Display daily summary only (do not launch sessions)\n");
     printf("  -r, --resume            Automatically resume all active sessions without prompting\n");
+    printf("      --limit <N>         Resume only the N most recent sessions\n");
     printf("  -t, --terminal <name>   Target terminal client (iterm2, ghostty, kitty, apple-terminal,\n");
     printf("                          gnome-terminal, alacritty, konsole, windows-terminal, powershell)\n");
     printf("      --wrapper <name>    Prepend this launcher to every resume command\n");
@@ -213,6 +229,9 @@ static int parse_args(int argc, char **argv, flint_options_t *opts) {
         } else if (strcmp(arg, "--hours") == 0 && i + 1 < argc) {
             int hours = 0;
             if (parse_positive_int(argv[++i], &hours)) opts->lookback_hours = hours;
+        } else if (strcmp(arg, "--limit") == 0 && i + 1 < argc) {
+            int limit = 0;
+            if (parse_positive_int(argv[++i], &limit)) opts->resume_limit = limit;
         } else if ((strcmp(arg, "-w") == 0 || strcmp(arg, "--workspace") == 0) && i + 1 < argc) {
             fs_expand_path(argv[++i], opts->workspace_filter, sizeof(opts->workspace_filter));
         } else {
@@ -275,6 +294,35 @@ static void print_summary(const session_list_t *list) {
     printf("\n  " ANSI_DIM "────────────────────────────────────────────────────────────" ANSI_RESET "\n\n");
 }
 
+static bool tool_is_logged_out(const char *tool_cmd) {
+    if (!tool_cmd || !exec_command_exists(tool_cmd)) return false;
+
+    if (strcmp(tool_cmd, "claude") == 0) {
+        if (getenv("ANTHROPIC_API_KEY") || getenv("CLAUDE_CODE_OAUTH_TOKEN")) {
+            return false;
+        }
+        char *output = exec_capture("claude auth status");
+        if (!output) return false;
+        bool logged_in = false;
+        bool parsed = json_get_bool(output, "loggedIn", &logged_in);
+        free(output);
+        return parsed && !logged_in;
+    }
+
+    if (strcmp(tool_cmd, "codex") == 0) {
+        if (getenv("OPENAI_API_KEY") || getenv("CODEX_API_KEY")) {
+            return false;
+        }
+#ifdef _WIN32
+        return system("codex login status >nul 2>&1") != 0;
+#else
+        return system("codex login status >/dev/null 2>&1") != 0;
+#endif
+    }
+
+    return false;
+}
+
 static int resume_sessions(const session_list_t *list, const terminal_adapter_t *term,
                            bool dry_run, bool open_in_tabs) {
     if (!term) {
@@ -299,11 +347,25 @@ static int resume_sessions(const session_list_t *list, const terminal_adapter_t 
            launch_count, open_in_tabs ? "tabs" : "windows",
            term->display_name, dry_run ? " (Dry Run)" : "");
 
+    bool warned_claude = false;
+    bool warned_codex = false;
     for (size_t i = 0; i < list->count; i++) {
         const session_t *s = &list->items[i];
         if (s->is_already_running) {
             printf("  " ANSI_DIM "↷ [%s] in %s is already running (skipped)" ANSI_RESET "\n", s->tool_cmd, s->workspace);
             continue;
+        }
+
+        if (strcmp(s->tool_cmd, "claude") == 0 && !warned_claude) {
+            warned_claude = true;
+            if (tool_is_logged_out("claude")) {
+                printf("  " ANSI_YELLOW "⚠ claude is not logged in; run `claude auth login` if resume asks for authentication." ANSI_RESET "\n");
+            }
+        } else if (strcmp(s->tool_cmd, "codex") == 0 && !warned_codex) {
+            warned_codex = true;
+            if (tool_is_logged_out("codex")) {
+                printf("  " ANSI_YELLOW "⚠ codex is not logged in; run `codex login` if resume asks for authentication." ANSI_RESET "\n");
+            }
         }
 
         printf("  " ANSI_CYAN "→" ANSI_RESET " Opening %s for [%s] in %s\n",
@@ -450,6 +512,18 @@ int main(int argc, char **argv) {
             continue;
         }
         session_list_add(&resume_candidates, s);
+    }
+
+    session_list_sort_by_recency(&resume_candidates);
+
+    if (opts.resume_limit > 0) {
+        size_t kept = 0;
+        for (size_t i = 0; i < resume_candidates.count; i++) {
+            if (resume_candidates.items[i].is_already_running) continue;
+            if (kept >= (size_t)opts.resume_limit) break;
+            resume_candidates.items[kept++] = resume_candidates.items[i];
+        }
+        resume_candidates.count = kept;
     }
 
     /* Count sessions that aren't already running */

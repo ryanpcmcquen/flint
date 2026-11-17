@@ -108,6 +108,7 @@ Usage: flint [options]
 Options:
   -s, --summary           Display daily summary only (do not launch sessions)
   -r, --resume            Automatically resume all active sessions without prompting
+      --limit <N>         Resume only the N most recent sessions
   -t, --terminal <name>   Target terminal client (e.g. iterm2, ghostty, apple-terminal,
                           gnome-terminal, alacritty, kitty, windows-terminal)
       --wrapper <name>    Prepend this launcher to every resume command
