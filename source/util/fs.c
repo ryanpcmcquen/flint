@@ -139,7 +139,7 @@ int fs_mkdir_p(const char *path) {
     if (!copy) return -1;
     strcpy(copy, buf);
     for (char *p = copy + 1; *p; p++) {
-        if (*p == PATH_SEP) {
+        if (*p == '/' || *p == '\\') {
             *p = '\0';
             _mkdir(copy);
             *p = PATH_SEP;

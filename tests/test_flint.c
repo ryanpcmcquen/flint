@@ -41,6 +41,17 @@ static int passed_tests = 0;
         printf(ANSI_GREEN "PASSED" ANSI_RESET "\n"); \
     } while(0)
 
+static void test_temp_path(char *out, size_t out_size, const char *prefix) {
+    const char *root = getenv("TMPDIR");
+    if (!root || root[0] == '\0') root = getenv("TEMP");
+    if (!root || root[0] == '\0') root = getenv("TMP");
+    if (!root || root[0] == '\0') root = ".";
+
+    char name[MAX_NAME_LEN];
+    snprintf(name, sizeof(name), "%s_%d", prefix, (int)getpid());
+    fs_path_join(root, name, out, out_size);
+}
+
 static void test_json_primitives(void) {
     TEST("json_get_string");
     const char *json = "{\"tool\": \"antigravity\", \"version\": 2, \"active\": true}";
@@ -143,7 +154,7 @@ static void test_path_utils(void) {
 
     TEST("fs_read_head reads a bounded prefix");
     char head_path[MAX_PATH_LEN];
-    snprintf(head_path, sizeof(head_path), "/tmp/flint_test_head_%d", (int)getpid());
+    test_temp_path(head_path, sizeof(head_path), "flint_test_head");
     write_test_file(head_path, "0123456789");
     size_t head_size = 0;
     char *head = fs_read_head(head_path, 4, &head_size);
@@ -441,7 +452,7 @@ static void test_config_and_wrappers(void) {
 static void test_config_file_parsing(void) {
     TEST("config file parsing: [agy] wrapper, model, effort");
     char path[MAX_PATH_LEN];
-    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    test_temp_path(path, sizeof(path), "flint_test_config");
     FILE *f = fopen(path, "w");
     assert(f);
     fprintf(f, "[agy]\n");
@@ -463,7 +474,7 @@ static void test_config_file_parsing(void) {
     PASS();
 
     TEST("config file parsing: [codex] alias section");
-    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    test_temp_path(path, sizeof(path), "flint_test_config");
     f = fopen(path, "w");
     assert(f);
     fprintf(f, "[codex]\n");
@@ -485,7 +496,7 @@ static void test_config_file_parsing(void) {
     PASS();
 
     TEST("config file parsing: [openclaw] section");
-    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    test_temp_path(path, sizeof(path), "flint_test_config");
     f = fopen(path, "w");
     assert(f);
     fprintf(f, "[openclaw]\n");
@@ -507,7 +518,7 @@ static void test_config_file_parsing(void) {
     PASS();
 
     TEST("config file parsing: mcp_focus");
-    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    test_temp_path(path, sizeof(path), "flint_test_config");
     f = fopen(path, "w");
     assert(f);
     fprintf(f, "mcp_focus = false\n");
@@ -522,7 +533,7 @@ static void test_config_file_parsing(void) {
     PASS();
 
     TEST("config file parsing: open_in_tabs");
-    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    test_temp_path(path, sizeof(path), "flint_test_config");
     f = fopen(path, "w");
     assert(f);
     fprintf(f, "open_in_tabs = false\n");
@@ -537,7 +548,7 @@ static void test_config_file_parsing(void) {
     PASS();
 
     TEST("config file parsing: mcp_host");
-    snprintf(path, sizeof(path), "/tmp/flint_test_config_%d", (int)getpid());
+    test_temp_path(path, sizeof(path), "flint_test_config");
     f = fopen(path, "w");
     assert(f);
     fprintf(f, "mcp_host = cline\n");
@@ -789,7 +800,7 @@ static void test_mcp_host_gating(void) {
     char root[MAX_PATH_LEN];
     char home[MAX_PATH_LEN];
     char workspace[MAX_PATH_LEN];
-    snprintf(root, sizeof(root), "/tmp/flint_mcp_gate_test_%d", (int)getpid());
+    test_temp_path(root, sizeof(root), "flint_mcp_gate_test");
     snprintf(home, sizeof(home), "%s/home", root);
     snprintf(workspace, sizeof(workspace), "%s/ws", root);
     assert(fs_mkdir_p(home) == 0);
@@ -881,7 +892,7 @@ static void test_claude_codex_discovery(void) {
     char claude_project[MAX_PATH_LEN];
     char claude_file[MAX_PATH_LEN];
     char claude_workspace[MAX_PATH_LEN];
-    snprintf(root, sizeof(root), "/tmp/flint_ai_test_%d", (int)getpid());
+    test_temp_path(root, sizeof(root), "flint_ai_test");
     snprintf(home, sizeof(home), "%s/home", root);
     snprintf(claude_projects, sizeof(claude_projects), "%s/.claude/projects", home);
     snprintf(claude_project, sizeof(claude_project), "%s/-tmp-claude-project", claude_projects);
@@ -1352,7 +1363,7 @@ static void test_proc_running(void) {
 static void test_journal_generation(void) {
     TEST("journal_record_daily writes daily log");
     char repo[MAX_PATH_LEN];
-    snprintf(repo, sizeof(repo), "/tmp/flint_journal_test_%d", (int)getpid());
+    test_temp_path(repo, sizeof(repo), "flint_journal_test");
     flint_config_t cfg;
     config_init_defaults(&cfg);
     strncpy(cfg.journal_repo, repo, sizeof(cfg.journal_repo) - 1);
