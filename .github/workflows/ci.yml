@@ -44,6 +44,22 @@ jobs:
       - name: Test
         run: make test CC=gcc
 
+  linux-static:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build static
+        run: make CC='gcc -static'
+      - name: Verify static binary
+        run: |
+          ./flint --version
+          file flint
+          file flint | grep -q 'statically linked'
+          if readelf -d flint 2>/dev/null | grep -q NEEDED; then
+            echo "flint has dynamic dependencies"
+            exit 1
+          fi
+
   windows-nmake:
     runs-on: windows-latest
     steps:
