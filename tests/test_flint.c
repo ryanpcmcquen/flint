@@ -15,6 +15,7 @@
 #include "../source/config/config.h"
 #include "../source/git/git.h"
 #include "../source/util/fs.h"
+#include "../source/util/exec.h"
 #include "../source/util/json.h"
 #include "../source/terminal/terminal.h"
 #include "../source/journal/journal.h"
@@ -1453,6 +1454,63 @@ static void test_journal_generation(void) {
     free(daily_content);
 
     session_list_free(&list);
+    PASS();
+
+    TEST("journal pushes to origin and sets upstream");
+    if (exec_command_exists("git")) {
+        char remote[MAX_PATH_LEN];
+        char work[MAX_PATH_LEN];
+        char cfg_path[MAX_PATH_LEN];
+        test_temp_path(remote, sizeof(remote), "flint_journal_remote");
+        test_temp_path(work, sizeof(work), "flint_journal_work");
+        test_temp_path(cfg_path, sizeof(cfg_path), "flint_journal_cfg");
+
+        char qremote[MAX_PATH_LEN * 2];
+        char qwork[MAX_PATH_LEN * 2];
+        exec_shell_quote(remote, qremote, sizeof(qremote));
+        exec_shell_quote(work, qwork, sizeof(qwork));
+
+        char cmd[MAX_PATH_LEN * 4];
+        snprintf(cmd, sizeof(cmd), "git init --bare %s", qremote);
+        assert(system(cmd) == 0);
+        snprintf(cmd, sizeof(cmd), "git init %s", qwork);
+        assert(system(cmd) == 0);
+        snprintf(cmd, sizeof(cmd), "git -C %s config user.name Test", qwork);
+        assert(system(cmd) == 0);
+        snprintf(cmd, sizeof(cmd), "git -C %s config user.email test@example.com", qwork);
+        assert(system(cmd) == 0);
+        snprintf(cmd, sizeof(cmd), "git -C %s remote add origin %s", qwork, qremote);
+        assert(system(cmd) == 0);
+
+        char cfg_contents[MAX_PATH_LEN + 32];
+        snprintf(cfg_contents, sizeof(cfg_contents), "journal_repo = %s\n", work);
+        write_test_file(cfg_path, cfg_contents);
+
+        flint_config_t push_cfg;
+        assert(config_load(cfg_path, &push_cfg));
+        session_list_t push_list;
+        session_list_init(&push_list);
+        session_t push_session;
+        memset(&push_session, 0, sizeof(push_session));
+        strncpy(push_session.tool_name, "Test", sizeof(push_session.tool_name) - 1);
+        strncpy(push_session.workspace, "~/code/push_test", sizeof(push_session.workspace) - 1);
+        strncpy(push_session.summary, "Journal push test", sizeof(push_session.summary) - 1);
+        push_session.origin = SESSION_ORIGIN_USER;
+        session_list_add(&push_list, &push_session);
+
+        assert(journal_record_daily(&push_cfg, &push_list) == 0);
+
+        snprintf(cmd, sizeof(cmd), "git -C %s rev-parse --verify HEAD", qremote);
+        assert(system(cmd) == 0);
+        snprintf(cmd, sizeof(cmd), "git -C %s rev-parse --abbrev-ref @{u}", qwork);
+        assert(system(cmd) == 0);
+
+        session_list_free(&push_list);
+        config_destroy(&push_cfg);
+        test_remove_tree(remote);
+        test_remove_tree(work);
+        remove(cfg_path);
+    }
     PASS();
 
     TEST("fs_tildify_path and fs_redact_home_paths collapse home prefix");
