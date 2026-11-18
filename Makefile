@@ -16,10 +16,6 @@ TITLE=flint
 
 FLAGS=-Wall -Wextra -std=c99
 
-# Shared prereq glob: keep it POSIX-style so GNU/BSD make never sees source\*
-# (nmake is typically fine with forward slashes here).
-DEPS=source/* source/*/*
-
 # \
 !IFDEF MAKEDIR # \
 # -------------------- nmake (Windows) configuration -------------------- # \
@@ -30,6 +26,7 @@ RM=del /q # \
 CC=clang # \
 # Windows paths/inputs for the compiler stage: # \
 WIN_SOURCE=source\flint.c source\ai\antigravity.c source\ai\claude.c source\ai\cline.c source\ai\codex.c source\ai\mcp.c source\ai\openclaw.c source\ai\opencode.c source\brief\brief.c source\config\config.c source\git\git.c source\journal\journal.c source\process\proc.c source\terminal\linux.c source\terminal\macos.c source\terminal\terminal.c source\terminal\windows.c source\util\exec.c source\util\fs.c source\util\json.c # \
+DEPS=$(WIN_SOURCE) # \
 WIN_TARGET=-o $(TITLE).exe # \
 # Build commands (single-line; safe to call from shared targets): # \
 RELEASE_CMD=$(CC) $(FLAGS) -O3 $(WIN_SOURCE) $(WIN_TARGET) # \
@@ -46,6 +43,7 @@ CC=clang
 
 POSIX_SOURCE=source/flint.c source/*/*.c
 POSIX_FLAGS=$(FLAGS) -D_POSIX_C_SOURCE=200809L
+DEPS=source/* source/*/*
 
 RELEASE_CMD=$(CC) $(POSIX_FLAGS) -O3 $(POSIX_SOURCE) -o $(TITLE)
 DEBUG_CMD=$(CC) $(POSIX_FLAGS) -g $(POSIX_SOURCE) -o $(TITLE)
