@@ -1462,6 +1462,15 @@ static void test_journal_generation(void) {
     }
     free(daily_content);
 
+    char readme_path[MAX_PATH_LEN];
+    fs_path_join(repo, "README.md", readme_path, sizeof(readme_path));
+    assert(fs_file_exists(readme_path));
+    char *readme_content = fs_read_file(readme_path, NULL);
+    assert(readme_content != NULL);
+    assert(strstr(readme_content, "## Index") != NULL);
+    assert(strstr(readme_content, date_file) != NULL);
+    free(readme_content);
+
     session_list_free(&list);
     PASS();
 
@@ -1551,6 +1560,10 @@ static void test_journal_generation(void) {
     char week_path[MAX_PATH_LEN];
     fs_path_join(weekly_dir, week_file, week_path, sizeof(week_path));
     assert(fs_file_exists(week_path));
+    char *week_readme = fs_read_file(readme_path, NULL);
+    assert(week_readme != NULL);
+    assert(strstr(week_readme, week_file) != NULL);
+    free(week_readme);
     PASS();
 
     TEST("journal_generate_monthly writes monthly summary");
@@ -1563,6 +1576,10 @@ static void test_journal_generation(void) {
     char mon_path[MAX_PATH_LEN];
     fs_path_join(monthly_dir, mon_file, mon_path, sizeof(mon_path));
     assert(fs_file_exists(mon_path));
+    char *month_readme = fs_read_file(readme_path, NULL);
+    assert(month_readme != NULL);
+    assert(strstr(month_readme, mon_file) != NULL);
+    free(month_readme);
     PASS();
 }
 

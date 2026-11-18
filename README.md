@@ -197,7 +197,7 @@ $ flint --journal
 
 Use `--weekly` to compile the last 7 daily logs into a weekly summary, or `--monthly` for the last 30.
 
-The journal repository is configured with `journal_repo` in the config file (default: `~/notes/flint-journal`).
+The journal repository is configured with `journal_repo` in the config file (default: `~/notes/flint-journal`). Flint also writes and updates a `README.md` index linking the daily, weekly, and monthly logs.
 
 ### Configuration
 

@@ -36,6 +36,97 @@ static void journal_push_to_remote(const char *repo) {
     }
 }
 
+typedef struct {
+    char **items;
+    size_t count;
+    size_t capacity;
+} journal_index_t;
+
+static int journal_index_cb(const char *parent, const char *entry_name,
+                            bool is_dir, void *userdata) {
+    (void)parent;
+    if (is_dir || !str_has_suffix(entry_name, ".md")) return 0;
+
+    journal_index_t *index = (journal_index_t *)userdata;
+    if (index->count >= index->capacity) {
+        size_t new_capacity = index->capacity ? index->capacity * 2 : 16;
+        char **grown = (char **)realloc(index->items, new_capacity * sizeof(char *));
+        if (!grown) return 0;
+        index->items = grown;
+        index->capacity = new_capacity;
+    }
+
+    size_t len = strlen(entry_name);
+    char *copy = (char *)malloc(len + 1);
+    if (!copy) return 0;
+    memcpy(copy, entry_name, len + 1);
+    index->items[index->count++] = copy;
+    return 0;
+}
+
+static int journal_index_cmp_desc(const void *a, const void *b) {
+    const char *name_a = *(const char *const *)a;
+    const char *name_b = *(const char *const *)b;
+    return strcmp(name_b, name_a);
+}
+
+static void journal_index_free(journal_index_t *index) {
+    for (size_t i = 0; i < index->count; i++) {
+        free(index->items[i]);
+    }
+    free(index->items);
+    memset(index, 0, sizeof(*index));
+}
+
+static void journal_write_index_section(FILE *f, const char *repo,
+                                        const char *dir_name, const char *heading) {
+    journal_index_t index;
+    memset(&index, 0, sizeof(index));
+
+    char dir_path[MAX_PATH_LEN];
+    fs_path_join(repo, dir_name, dir_path, sizeof(dir_path));
+    fs_list_dir(dir_path, journal_index_cb, &index);
+    qsort(index.items, index.count, sizeof(char *), journal_index_cmp_desc);
+
+    fprintf(f, "## %s\n\n", heading);
+    if (index.count == 0) {
+        fprintf(f, "_No entries yet._\n\n");
+    } else {
+        for (size_t i = 0; i < index.count; i++) {
+            const char *name = index.items[i];
+            size_t len = strlen(name);
+            if (len > 3 && strcmp(name + len - 3, ".md") == 0) len -= 3;
+            fprintf(f, "- [%.*s](%s/%s)\n", (int)len, name, dir_name, name);
+        }
+        fprintf(f, "\n");
+    }
+
+    journal_index_free(&index);
+}
+
+static void journal_write_readme(const char *repo) {
+    if (!repo || repo[0] == '\0') return;
+
+    char readme_path[MAX_PATH_LEN];
+    fs_path_join(repo, "README.md", readme_path, sizeof(readme_path));
+    FILE *f = fopen(readme_path, "w");
+    if (!f) return;
+
+    fprintf(f, "# Flint Journal\n\n");
+    fprintf(f, "Daily, weekly, and monthly work logs recorded by ");
+    fprintf(f, "[Flint](https://github.com/ryanpcmcquen/flint).\n\n");
+    fprintf(f, "## Index\n\n");
+    fprintf(f, "- [Daily logs](#daily-logs)\n");
+    fprintf(f, "- [Weekly summaries](#weekly-summaries)\n");
+    fprintf(f, "- [Monthly summaries](#monthly-summaries)\n\n");
+
+    journal_write_index_section(f, repo, "daily", "Daily logs");
+    journal_write_index_section(f, repo, "weekly", "Weekly summaries");
+    journal_write_index_section(f, repo, "monthly", "Monthly summaries");
+
+    fclose(f);
+}
+
 int journal_record_daily(const flint_config_t *cfg, const session_list_t *list) {
     if (!cfg || !list) return -1;
     if (cfg->journal_repo[0] == '\0') return 0;
@@ -133,6 +224,7 @@ int journal_record_daily(const flint_config_t *cfg, const session_list_t *list) 
     fprintf(f, "\n---\n*Logged automatically by [Flint](https://github.com/ryanpcmcquen/flint)*\n");
 
     fclose(f);
+    journal_write_readme(cfg->journal_repo);
     printf("  " ANSI_GREEN "✓" ANSI_RESET " Daily standup logged to " ANSI_BOLD "%s" ANSI_RESET "\n", file_path);
 
     /* If the journal is a git repository, commit the log */
@@ -227,6 +319,7 @@ int journal_generate_weekly(const flint_config_t *cfg) {
     fs_list_dir(daily_dir, summary_file_cb, &walker);
 
     fclose(f);
+    journal_write_readme(cfg->journal_repo);
 
     printf("\n  " ANSI_BOLD ANSI_GREEN "✓ Compiled %d daily log(s) into " ANSI_CYAN "%s" ANSI_RESET "\n\n",
            walker.entry_count, out_path);
@@ -282,6 +375,7 @@ int journal_generate_monthly(const flint_config_t *cfg) {
     fs_list_dir(daily_dir, summary_file_cb, &walker);
 
     fclose(f);
+    journal_write_readme(cfg->journal_repo);
 
     printf("\n  " ANSI_BOLD ANSI_GREEN "✓ Compiled %d daily log(s) into " ANSI_CYAN "%s" ANSI_RESET "\n\n",
            walker.entry_count, out_path);
