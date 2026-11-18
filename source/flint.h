@@ -12,7 +12,7 @@
   #define strncasecmp _strnicmp
 #endif
 
-#define FLINT_VERSION "0.5.0"
+#define FLINT_VERSION "0.5.1"
 #define MAX_PATH_LEN 1024
 #define MAX_CMD_LEN 1024
 #define MAX_NAME_LEN 64
