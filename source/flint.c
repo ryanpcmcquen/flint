@@ -109,6 +109,65 @@ bool resume_session_should_include(const session_t *s, resume_mode_t mode) {
     return true;
 }
 
+bool parse_session_selection(const char *input, size_t count, bool *selected) {
+    if (!selected) return false;
+    for (size_t i = 0; i < count; i++) selected[i] = false;
+
+    char buf[256];
+    if (!input) buf[0] = '\0';
+    else {
+        strncpy(buf, input, sizeof(buf) - 1);
+        buf[sizeof(buf) - 1] = '\0';
+        str_trim(buf);
+    }
+
+    if (buf[0] == '\0' || strcmp(buf, "a") == 0 || strcmp(buf, "all") == 0 ||
+        strcmp(buf, "*") == 0) {
+        for (size_t i = 0; i < count; i++) selected[i] = true;
+        return true;
+    }
+
+    if (strcmp(buf, "n") == 0 || strcmp(buf, "none") == 0) {
+        return true;
+    }
+
+    const char *p = buf;
+    bool any = false;
+    while (*p) {
+        while (*p == ' ' || *p == '\t' || *p == ',') p++;
+        if (*p == '\0') break;
+        if (*p < '0' || *p > '9') return false;
+
+        char *end = NULL;
+        unsigned long start = strtoul(p, &end, 10);
+        if (end == p) return false;
+        p = end;
+
+        unsigned long finish = start;
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p == '-') {
+            p++;
+            while (*p == ' ' || *p == '\t') p++;
+            if (*p < '0' || *p > '9') return false;
+            finish = strtoul(p, &end, 10);
+            if (end == p) return false;
+            p = end;
+        }
+
+        if (start == 0 || finish == 0 || start > finish) return false;
+        if (start > count || finish > count) return false;
+        for (unsigned long i = start; i <= finish; i++) {
+            selected[i - 1] = true;
+        }
+        any = true;
+
+        while (*p == ' ' || *p == '\t') p++;
+        if (*p != '\0' && *p != ',') return false;
+    }
+
+    return any;
+}
+
 #ifndef TEST_MODE
 
 #define BANNER_INNER_WIDTH 62
@@ -321,6 +380,55 @@ static bool tool_is_logged_out(const char *tool_cmd) {
     }
 
     return false;
+}
+
+static bool prompt_resume_selection(const session_list_t *list, session_list_t *chosen) {
+    if (!list || list->count == 0 || !chosen) return false;
+
+    printf("\n  " ANSI_BOLD "Select sessions to resume:" ANSI_RESET "\n\n");
+    for (size_t i = 0; i < list->count; i++) {
+        const session_t *s = &list->items[i];
+        char workspace[MAX_PATH_LEN];
+        char summary[96];
+        fs_tildify_path(s->workspace, workspace, sizeof(workspace));
+        str_truncate_clean(summary, s->summary, sizeof(summary));
+        if (summary[0] == '\0') {
+            snprintf(summary, sizeof(summary), "Recent session");
+        }
+        printf("   %2zu. " ANSI_CYAN "[%s]" ANSI_RESET " %s — %s\n",
+               i + 1, s->tool_cmd, workspace, summary);
+    }
+    printf("\n  Enter numbers/ranges (e.g. 1,3-4), 'a' for all, 'n' for none [a]: ");
+    fflush(stdout);
+
+    char input[256] = {0};
+    if (!fgets(input, sizeof(input), stdin)) return false;
+    str_trim(input);
+
+    bool *selected = (bool *)calloc(list->count, sizeof(bool));
+    if (!selected) return false;
+
+    if (!parse_session_selection(input, list->count, selected)) {
+        free(selected);
+        printf("  " ANSI_YELLOW "Invalid selection." ANSI_RESET "\n\n");
+        return false;
+    }
+
+    size_t count = 0;
+    for (size_t i = 0; i < list->count; i++) {
+        if (selected[i]) {
+            session_list_add(chosen, &list->items[i]);
+            count++;
+        }
+    }
+    free(selected);
+
+    if (count == 0) {
+        printf("  " ANSI_DIM "No sessions selected." ANSI_RESET "\n\n");
+        return false;
+    }
+
+    return true;
 }
 
 static int resume_sessions(const session_list_t *list, const terminal_adapter_t *term,
@@ -542,30 +650,33 @@ int main(int argc, char **argv) {
     }
 
     bool should_resume = opts.resume_now || opts.dry_run;
+    session_list_t picked;
+    session_list_init(&picked);
 
     if (!should_resume && isatty(fileno(stdin))) {
-        const char *mode_str = (cfg.resume_mode == RESUME_MODE_USER) ? "user" :
-                               (cfg.resume_mode == RESUME_MODE_AGENT) ? "agent" : "all";
-        printf("  Resume %zu %s session(s) in %s via " ANSI_BOLD "%s" ANSI_RESET "? [Y/n] ",
-               resumable_count, mode_str, cfg.open_in_tabs ? "tabs" : "windows",
-               target_term ? target_term->display_name : "terminal");
-        fflush(stdout);
-
-        char input[32] = {0};
-        if (fgets(input, sizeof(input), stdin)) {
-            str_trim(input);
-            if (input[0] == '\0' || input[0] == 'y' || input[0] == 'Y') {
-                should_resume = true;
-            } else {
-                printf(ANSI_DIM "  Skipping session resumption.\n\n" ANSI_RESET);
+        session_list_t pick_list;
+        session_list_init(&pick_list);
+        for (size_t i = 0; i < resume_candidates.count; i++) {
+            if (!resume_candidates.items[i].is_already_running) {
+                session_list_add(&pick_list, &resume_candidates.items[i]);
             }
         }
+
+        if (prompt_resume_selection(&pick_list, &picked)) {
+            should_resume = true;
+        } else {
+            printf(ANSI_DIM "  Skipping session resumption.\n\n" ANSI_RESET);
+        }
+
+        session_list_free(&pick_list);
     }
 
     if (should_resume) {
-        resume_sessions(&resume_candidates, target_term, opts.dry_run, cfg.open_in_tabs);
+        const session_list_t *to_resume = picked.count > 0 ? &picked : &resume_candidates;
+        resume_sessions(to_resume, target_term, opts.dry_run, cfg.open_in_tabs);
     }
 
+    session_list_free(&picked);
     session_list_free(&resume_candidates);
     session_list_free(&all_sessions);
     return 0;

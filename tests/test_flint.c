@@ -1387,6 +1387,37 @@ static void test_mcp_host_backends(void) {
     PASS();
 }
 
+static void test_session_selection_parser(void) {
+    TEST("session selection parser: ranges and lists");
+    bool selected[5];
+    assert(parse_session_selection("1,3-4", 5, selected));
+    assert(selected[0] && !selected[1] && selected[2] && selected[3] && !selected[4]);
+
+    assert(parse_session_selection(" 1 , 3 - 4 ", 5, selected));
+    assert(selected[0] && !selected[1] && selected[2] && selected[3] && !selected[4]);
+
+    assert(parse_session_selection("2", 5, selected));
+    assert(!selected[0] && selected[1] && !selected[2] && !selected[3] && !selected[4]);
+    PASS();
+
+    TEST("session selection parser: all, none, and invalid");
+    assert(parse_session_selection("", 5, selected));
+    for (size_t i = 0; i < 5; i++) assert(selected[i]);
+
+    assert(parse_session_selection("a", 5, selected));
+    for (size_t i = 0; i < 5; i++) assert(selected[i]);
+
+    assert(parse_session_selection("n", 5, selected));
+    for (size_t i = 0; i < 5; i++) assert(!selected[i]);
+
+    assert(parse_session_selection("0", 5, selected) == false);
+    assert(parse_session_selection("6", 5, selected) == false);
+    assert(parse_session_selection("x", 5, selected) == false);
+    assert(parse_session_selection("3-1", 5, selected) == false);
+    assert(parse_session_selection("1,,x", 5, selected) == false);
+    PASS();
+}
+
 static void test_resume_mode_filter(void) {
     TEST("resume_mode filter: user sessions only");
     session_t s;
@@ -1619,6 +1650,7 @@ int main(void) {
     test_git_inspection();
     test_journal_generation();
     test_proc_running();
+    test_session_selection_parser();
     test_resume_mode_filter();
 
     printf("\n" ANSI_BOLD ANSI_GREEN "All %d tests passed successfully!" ANSI_RESET "\n\n", passed_tests);

@@ -181,10 +181,15 @@ $ flint
 
   ────────────────────────────────────────────────────────────
 
-  Resume 2 active session(s) in iTerm2? [Y/n]
+  Select sessions to resume:
+
+    1. [Antigravity CLI] ~/code/flint — Added cross-platform terminal adapters
+    2. [Claude Code] ~/code/basque — Updated the audio mixer and sprite collisions
+
+  Enter numbers/ranges (e.g. 1,3-4), 'a' for all, 'n' for none [a]:
 ```
 
-Pressing **Enter** or typing **`Y`** immediately opens a new tab in your terminal for each project and resumes the active AI CLI.
+Type numbers or ranges to choose exactly which sessions to resume, `a` for all, or `n` to skip. Pressing **Enter** selects all. Use `-r` to resume all without prompting, or `--limit N` to cap the list to the N most recent sessions.
 
 ### Daily Standup Log & Journal
 
