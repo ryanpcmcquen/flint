@@ -151,6 +151,9 @@ void session_list_add(session_list_t *list, const session_t *session);
 void session_list_sort_by_recency(session_list_t *list);
 void session_list_free(session_list_t *list);
 
+/* Parse a resume selection like "1,3-4", "a"/"all", "n"/"none", or empty for all. */
+bool parse_session_selection(const char *input, size_t count, bool *selected);
+
 /* Whether a session should be included given the resume mode filter */
 bool resume_session_should_include(const session_t *s, resume_mode_t mode);
 
