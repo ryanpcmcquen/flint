@@ -66,6 +66,14 @@ GitHub Releases include prebuilt binaries for macOS arm64, Linux x86_64, and Win
 
 https://github.com/ryanpcmcquen/flint/releases
 
+### Homebrew
+
+```sh
+brew install ryanpcmcquen/tap/flint-ai
+```
+
+The formula is named `flint-ai` because Homebrew core already has a `flint` formula (the number-theory library). It installs the `flint` binary.
+
 ---
 
 ## Building
