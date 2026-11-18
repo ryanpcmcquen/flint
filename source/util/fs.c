@@ -9,6 +9,9 @@
   #include <io.h>
   #include <direct.h>
   #define stat _stat
+  #ifndef S_ISDIR
+    #define S_ISDIR(mode) (((mode) & _S_IFDIR) != 0)
+  #endif
 #else
   #include <unistd.h>
   #include <dirent.h>

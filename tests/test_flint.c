@@ -2,7 +2,12 @@
 #include <stdlib.h>
 #include <string.h>
 #include <assert.h>
-#include <unistd.h>
+#ifdef _WIN32
+  #include <process.h>
+  #define getpid _getpid
+#else
+  #include <unistd.h>
+#endif
 #include "../source/flint.h"
 #include "../source/ai/mcp.h"
 #include "../source/ai/ai_adapter.h"
@@ -61,6 +66,16 @@ static void test_json_escape(const char *src, char *dst, size_t dst_size) {
         dst[w++] = *src;
     }
     dst[w] = '\0';
+}
+
+static void test_remove_tree(const char *path) {
+    char cmd[MAX_PATH_LEN + 32];
+#ifdef _WIN32
+    snprintf(cmd, sizeof(cmd), "rmdir /s /q \"%s\"", path);
+#else
+    snprintf(cmd, sizeof(cmd), "rm -rf '%s'", path);
+#endif
+    system(cmd);
 }
 
 static void test_json_primitives(void) {
@@ -891,9 +906,7 @@ static void test_mcp_host_gating(void) {
         unsetenv("USERPROFILE");
     }
 
-    char cleanup[MAX_PATH_LEN + 32];
-    snprintf(cleanup, sizeof(cleanup), "rm -rf '%s'", root);
-    assert(system(cleanup) == 0);
+    test_remove_tree(root);
     PASS();
 }
 
@@ -1091,9 +1104,7 @@ static void test_claude_codex_discovery(void) {
         unsetenv("USERPROFILE");
     }
 
-    char cleanup[MAX_PATH_LEN + 32];
-    snprintf(cleanup, sizeof(cleanup), "rm -rf '%s'", root);
-    assert(system(cleanup) == 0);
+    test_remove_tree(root);
     PASS();
 }
 

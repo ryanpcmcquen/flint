@@ -29,7 +29,7 @@ MV=move # \
 RM=del /q # \
 CC=clang # \
 # Windows paths/inputs for the compiler stage: # \
-WIN_SOURCE=source\flint.c source\ai\*.c source\terminal\*.c source\util\*.c source\config\*.c source\git\*.c source\journal\*.c source\process\*.c # \
+WIN_SOURCE=source\flint.c source\ai\antigravity.c source\ai\claude.c source\ai\cline.c source\ai\codex.c source\ai\mcp.c source\ai\openclaw.c source\ai\opencode.c source\brief\brief.c source\config\config.c source\git\git.c source\journal\journal.c source\process\proc.c source\terminal\linux.c source\terminal\macos.c source\terminal\terminal.c source\terminal\windows.c source\util\exec.c source\util\fs.c source\util\json.c # \
 WIN_TARGET=-o $(TITLE).exe # \
 # Build commands (single-line; safe to call from shared targets): # \
 RELEASE_CMD=$(CC) $(FLAGS) -O3 $(WIN_SOURCE) $(WIN_TARGET) # \

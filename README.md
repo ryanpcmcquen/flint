@@ -62,7 +62,7 @@ Flint automatically detects your running terminal emulator, or allows you to tar
 
 ## Prebuilt binaries
 
-GitHub Releases include prebuilt binaries for macOS arm64, Linux x86_64, and Windows x86_64:
+GitHub Releases include prebuilt binaries for macOS arm64, Linux x86_64, and Windows x86_64, plus a SHA-256 checksums file:
 
 https://github.com/ryanpcmcquen/flint/releases
 
