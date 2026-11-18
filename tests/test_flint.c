@@ -4,7 +4,9 @@
 #include <assert.h>
 #ifdef _WIN32
   #include <process.h>
+  #include <direct.h>
   #define getpid _getpid
+  #define getcwd _getcwd
 #else
   #include <unistd.h>
 #endif
@@ -51,7 +53,14 @@ static void test_temp_path(char *out, size_t out_size, const char *prefix) {
     const char *root = getenv("TMPDIR");
     if (!root || root[0] == '\0') root = getenv("TEMP");
     if (!root || root[0] == '\0') root = getenv("TMP");
-    if (!root || root[0] == '\0') root = ".";
+    char cwd[MAX_PATH_LEN];
+    if (!root || root[0] == '\0') {
+        if (getcwd(cwd, sizeof(cwd))) {
+            root = cwd;
+        } else {
+            root = ".";
+        }
+    }
 
     char name[MAX_NAME_LEN];
     snprintf(name, sizeof(name), "%s_%d", prefix, (int)getpid());
