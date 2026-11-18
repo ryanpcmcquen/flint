@@ -17,12 +17,19 @@ jobs:
           - os: macos-latest
             name: macos-arm64
             binary: flint
+            build: make
           - os: ubuntu-latest
             name: linux-x86_64
             binary: flint
+            build: make
+          - os: ubuntu-latest
+            name: linux-x86_64-static
+            binary: flint
+            build: "make CC='gcc -static'"
           - os: windows-latest
             name: windows-x86_64
             binary: flint.exe
+            build: ""
     runs-on: ${{ matrix.os }}
     steps:
       - uses: actions/checkout@v4
@@ -44,7 +51,7 @@ jobs:
 
       - name: Build Unix
         if: runner.os != 'Windows'
-        run: make
+        run: ${{ matrix.build }}
 
       - name: Build Windows
         if: runner.os == 'Windows'

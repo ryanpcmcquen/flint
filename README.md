@@ -74,6 +74,16 @@ brew install ryanpcmcquen/tap/flint-ai
 
 The formula is named `flint-ai` because Homebrew core already has a `flint` formula (the number-theory library). It installs the `flint` binary.
 
+### macOS Gatekeeper warning
+
+The macOS release binary is **unsigned and not notarized**. If macOS blocks it, right-click the binary and choose **Open**, or remove the quarantine attribute:
+
+```sh
+xattr -d com.apple.quarantine flint-<version>-macos-arm64
+```
+
+Installing through Homebrew avoids this because the formula builds from source.
+
 ---
 
 ## Building
