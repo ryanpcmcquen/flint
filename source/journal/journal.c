@@ -27,12 +27,13 @@ static void journal_push_to_remote(const char *repo) {
     }
 
     char push_cmd[MAX_CMD_LEN * 2];
-#ifdef _WIN32
-    snprintf(push_cmd, sizeof(push_cmd), "git -C \"%s\" push origin >nul 2>&1", repo);
-#else
-    snprintf(push_cmd, sizeof(push_cmd), "git -C \"%s\" push origin >/dev/null 2>&1", repo);
-#endif
-    system(push_cmd);
+    snprintf(push_cmd, sizeof(push_cmd), "git -C \"%s\" push --quiet -u origin HEAD", repo);
+    int rc = system(push_cmd);
+    if (rc != 0) {
+        fprintf(stderr,
+                "  " ANSI_YELLOW "Journal push failed. Run: git -C \"%s\" push -u origin HEAD" ANSI_RESET "\n",
+                repo);
+    }
 }
 
 int journal_record_daily(const flint_config_t *cfg, const session_list_t *list) {
