@@ -8,6 +8,8 @@
   #include <tlhelp32.h>
   #include <process.h>
   #define getpid _getpid
+  #define popen _popen
+  #define pclose _pclose
 #else
   #include <unistd.h>
 #endif
