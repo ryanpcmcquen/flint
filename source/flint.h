@@ -7,6 +7,11 @@
 #include <time.h>
 #include <stdbool.h>
 
+#ifdef _WIN32
+  #define strcasecmp _stricmp
+  #define strncasecmp _strnicmp
+#endif
+
 #define FLINT_VERSION "0.4.0"
 #define MAX_PATH_LEN 1024
 #define MAX_CMD_LEN 1024

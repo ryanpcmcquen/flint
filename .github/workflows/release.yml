@@ -80,6 +80,11 @@ jobs:
           path: dist
           merge-multiple: true
 
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > "flint-${GITHUB_REF_NAME}-SHA256SUMS.txt"
+
       - name: Upload binaries to release
         env:
           GH_TOKEN: ${{ github.token }}
