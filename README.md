@@ -133,6 +133,7 @@ Usage: flint [options]
 
 Options:
   -s, --summary           Display daily summary only (do not launch sessions)
+      --json              Output machine-readable JSON (no launch or journal)
   -r, --resume            Automatically resume all active sessions without prompting
       --limit <N>         Resume only the N most recent sessions
   -t, --terminal <name>   Target terminal client (e.g. iterm2, ghostty, apple-terminal,
@@ -208,6 +209,24 @@ $ flint
 ```
 
 Type numbers or ranges to choose exactly which sessions to resume, `a` for all, or `n` to skip. Pressing **Enter** selects all. Use `-r` to resume all without prompting, or `--limit N` to cap the list to the N most recent sessions.
+
+### JSON output
+
+Use `--json` for scripting and integrations:
+
+```sh
+flint --json --days 7
+```
+
+This emits a single JSON document containing:
+
+- Flint version and generation timestamp
+- Lookback window and resume mode
+- Workspace groups with git state
+- Sessions, resume commands, and running state
+- Ranked focus items
+
+`--json` skips the banner, journal writing, and session launching, so it is read-only.
 
 ### Daily Standup Log & Journal
 

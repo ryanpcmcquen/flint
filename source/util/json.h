@@ -8,6 +8,9 @@
 /* Unescape a JSON string literal into plain text */
 void json_unescape(const char *src, char *dst, size_t dst_size);
 
+/* Escape plain text into a JSON string literal (without surrounding quotes). */
+void json_escape_string(const char *src, char *dst, size_t dst_size);
+
 /* Find string value for key in JSON object: "key": "value" */
 bool json_get_string(const char *json, const char *key, char *out, size_t out_size);
 

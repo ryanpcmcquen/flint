@@ -36,6 +36,43 @@ void json_unescape(const char *src, char *dst, size_t dst_size) {
     dst[w] = '\0';
 }
 
+void json_escape_string(const char *src, char *dst, size_t dst_size) {
+    if (!dst || dst_size == 0) return;
+
+    size_t w = 0;
+    if (!src) src = "";
+    for (; *src && w + 1 < dst_size; src++) {
+        unsigned char c = (unsigned char)*src;
+        const char *escaped = NULL;
+        char unicode_buf[8];
+
+        switch (c) {
+            case '"': escaped = "\\\""; break;
+            case '\\': escaped = "\\\\"; break;
+            case '\b': escaped = "\\b"; break;
+            case '\f': escaped = "\\f"; break;
+            case '\n': escaped = "\\n"; break;
+            case '\r': escaped = "\\r"; break;
+            case '\t': escaped = "\\t"; break;
+            default:
+                if (c < 0x20) {
+                    snprintf(unicode_buf, sizeof(unicode_buf), "\\u%04x", c);
+                    escaped = unicode_buf;
+                }
+                break;
+        }
+
+        if (escaped) {
+            for (const char *p = escaped; *p && w + 1 < dst_size; p++) {
+                dst[w++] = *p;
+            }
+        } else {
+            dst[w++] = (char)c;
+        }
+    }
+    dst[w] = '\0';
+}
+
 static const char *find_key(const char *json, const char *key) {
     if (!json || !key) return NULL;
     size_t key_len = strlen(key);

@@ -135,6 +135,14 @@ static void test_json_unescape(void) {
     json_unescape(escaped, unescaped, sizeof(unescaped));
     assert(strcmp(unescaped, "Hello\nWorld\t\"Test\"\\") == 0);
     PASS();
+
+    TEST("json_escape_string");
+    char escaped_out[128];
+    json_escape_string("Hello\nWorld\t\"Test\"\\", escaped_out, sizeof(escaped_out));
+    assert(strcmp(escaped_out, "Hello\\nWorld\\t\\\"Test\\\"\\\\") == 0);
+    json_escape_string("\x01", escaped_out, sizeof(escaped_out));
+    assert(strcmp(escaped_out, "\\u0001") == 0);
+    PASS();
 }
 
 static int count_lines_cb(const char *line, size_t len, size_t line_num, void *arg) {

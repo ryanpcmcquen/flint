@@ -130,6 +130,7 @@ typedef struct {
     bool summary_only;
     bool resume_now;
     bool dry_run;
+    bool json_output;
     int lookback_hours;
     int resume_limit;
     char target_terminal[MAX_NAME_LEN];

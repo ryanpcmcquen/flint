@@ -209,6 +209,7 @@ static void print_usage(const char *prog_name) {
     printf(ANSI_BOLD "Usage:" ANSI_RESET " %s [options]\n\n", prog_name);
     printf(ANSI_BOLD "Options:\n" ANSI_RESET);
     printf("  -s, --summary           Display daily summary only (do not launch sessions)\n");
+    printf("      --json              Output machine-readable JSON (no launch or journal)\n");
     printf("  -r, --resume            Automatically resume all active sessions without prompting\n");
     printf("      --limit <N>         Resume only the N most recent sessions\n");
     printf("  -t, --terminal <name>   Target terminal client (iterm2, ghostty, kitty, apple-terminal,\n");
@@ -243,6 +244,9 @@ static int parse_args(int argc, char **argv, flint_options_t *opts) {
             printf("Flint version %s (C99)\n", FLINT_VERSION);
             exit(0);
         } else if (strcmp(arg, "-s") == 0 || strcmp(arg, "--summary") == 0) {
+            opts->summary_only = true;
+        } else if (strcmp(arg, "--json") == 0) {
+            opts->json_output = true;
             opts->summary_only = true;
         } else if (strcmp(arg, "-r") == 0 || strcmp(arg, "--resume") == 0) {
             opts->resume_now = true;
@@ -351,6 +355,159 @@ static void print_summary(const session_list_t *list) {
     }
 
     printf("\n  " ANSI_DIM "────────────────────────────────────────────────────────────" ANSI_RESET "\n\n");
+}
+
+static void json_print_string(const char *text) {
+    const char *value = text ? text : "";
+    size_t len = strlen(value);
+    size_t size = len * 6 + 1;
+    char *escaped = (char *)malloc(size);
+    if (!escaped) {
+        printf("\"\"");
+        return;
+    }
+    json_escape_string(value, escaped, size);
+    printf("\"%s\"", escaped);
+    free(escaped);
+}
+
+static void json_workspace_label(const char *path, char *out, size_t out_size) {
+    if (!out || out_size == 0) return;
+    if (!path || path[0] == '\0') {
+        snprintf(out, out_size, "unknown workspace");
+        return;
+    }
+
+    const char *last = strrchr(path, '/');
+#ifdef _WIN32
+    const char *back = strrchr(path, '\\');
+    if (back && (!last || back > last)) last = back;
+#endif
+    const char *base = last ? last + 1 : path;
+    if (base[0] == '\0') base = path;
+    snprintf(out, out_size, "%s", base);
+}
+
+static void json_print_git(const git_info_t *git) {
+    printf("{\"is_repo\":%s,\"branch\":", git->is_git_repo ? "true" : "false");
+    json_print_string(git->branch);
+    printf(",\"uncommitted_count\":%d,\"commit_count\":%d,\"suggested_focus\":",
+           git->uncommitted_count, git->commit_count);
+    json_print_string(git->suggested_focus);
+    printf("}");
+}
+
+static void json_print_session(const session_t *s) {
+    printf("{\"id\":");
+    json_print_string(s->id);
+    printf(",\"tool\":");
+    json_print_string(s->tool_name);
+    printf(",\"tool_cmd\":");
+    json_print_string(s->tool_cmd);
+    printf(",\"workspace\":");
+    json_print_string(s->workspace);
+    printf(",\"origin\":\"%s\"", s->origin == SESSION_ORIGIN_AGENT ? "agent" : "user");
+    printf(",\"last_active\":");
+    json_print_string(s->last_active_str);
+    printf(",\"last_active_epoch\":%lld", (long long)s->last_active);
+    printf(",\"summary\":");
+    json_print_string(s->summary);
+    printf(",\"resume_cmd\":");
+    json_print_string(s->resume_cmd);
+    printf(",\"is_running\":%s", s->is_already_running ? "true" : "false");
+    printf(",\"git\":");
+    json_print_git(&s->git);
+    printf("}");
+}
+
+static void print_json_output(const session_list_t *list, const brief_t *brief,
+                              const flint_config_t *cfg, int lookback_hours) {
+    size_t session_count = list ? list->count : 0;
+    bool *done = session_count ? (bool *)calloc(session_count, sizeof(bool)) : NULL;
+
+    size_t workspace_count = 0;
+    for (size_t i = 0; i < session_count; i++) {
+        bool already_seen = false;
+        for (size_t j = 0; j < i; j++) {
+            if (strcmp(list->items[i].workspace, list->items[j].workspace) == 0) {
+                already_seen = true;
+                break;
+            }
+        }
+        if (!already_seen) workspace_count++;
+    }
+
+    time_t now = time(NULL);
+    struct tm *lt = localtime(&now);
+    char generated_at[64];
+    if (lt) {
+        strftime(generated_at, sizeof(generated_at), "%Y-%m-%dT%H:%M:%S%z", lt);
+    } else {
+        snprintf(generated_at, sizeof(generated_at), "%lld", (long long)now);
+    }
+
+    const char *mode = (cfg->resume_mode == RESUME_MODE_ALL) ? "all" :
+                       (cfg->resume_mode == RESUME_MODE_AGENT) ? "agent" : "user";
+
+    printf("{\"version\":");
+    json_print_string(FLINT_VERSION);
+    printf(",\"generated_at\":");
+    json_print_string(generated_at);
+    printf(",\"lookback_hours\":%d", lookback_hours);
+    printf(",\"resume_mode\":\"%s\"", mode);
+    printf(",\"counts\":{\"workspaces\":%zu,\"sessions\":%zu,\"focus\":%zu}",
+           workspace_count, session_count, brief ? brief->focus_count : 0);
+
+    printf(",\"workspaces\":[");
+    bool first_workspace = true;
+    for (size_t i = 0; i < session_count; i++) {
+        if (done && done[i]) continue;
+        const session_t *workspace_session = &list->items[i];
+        if (!first_workspace) printf(",");
+        first_workspace = false;
+
+        char label[MAX_PATH_LEN];
+        json_workspace_label(workspace_session->workspace, label, sizeof(label));
+
+        printf("{\"path\":");
+        json_print_string(workspace_session->workspace);
+        printf(",\"label\":");
+        json_print_string(label);
+        printf(",\"git\":");
+        json_print_git(&workspace_session->git);
+        printf(",\"sessions\":[");
+
+        bool first_session = true;
+        for (size_t j = i; j < session_count; j++) {
+            if (strcmp(list->items[j].workspace, workspace_session->workspace) != 0) continue;
+            if (done) done[j] = true;
+            if (!first_session) printf(",");
+            first_session = false;
+            json_print_session(&list->items[j]);
+        }
+        printf("]}");
+    }
+    printf("],\"focus\":[");
+
+    if (brief) {
+        for (size_t i = 0; i < brief->focus_count; i++) {
+            const focus_item_t *item = &brief->focus[i];
+            char label[MAX_PATH_LEN];
+            json_workspace_label(item->workspace, label, sizeof(label));
+            if (i > 0) printf(",");
+            printf("{\"rank\":%zu,\"workspace\":", i + 1);
+            json_print_string(item->workspace);
+            printf(",\"workspace_label\":");
+            json_print_string(label);
+            printf(",\"text\":");
+            json_print_string(item->text);
+            printf("}");
+        }
+    }
+
+    printf("]}\n");
+
+    free(done);
 }
 
 static bool tool_is_logged_out(const char *tool_cmd) {
@@ -523,7 +680,9 @@ int main(int argc, char **argv) {
         return journal_generate_monthly(&cfg);
     }
 
-    print_banner();
+    if (!opts.json_output) {
+        print_banner();
+    }
 
     /* Discover sessions across all registered AI CLI adapters */
     const ai_adapter_t **adapters = NULL;
@@ -552,19 +711,24 @@ int main(int argc, char **argv) {
     }
 
     /* Presented overview + focus derived from where work was left */
+    brief_t brief;
+    memset(&brief, 0, sizeof(brief));
     if (all_sessions.count > 0) {
-        brief_t brief;
         brief_build(&all_sessions, &brief);
         brief_collect_scribe_focus(&brief, sizeof(brief.focus) / sizeof(brief.focus[0]));
-        brief_print_overview(&all_sessions, cfg.lookback_hours);
-        brief_print_focus(&brief);
+        if (!opts.json_output) {
+            brief_print_overview(&all_sessions, cfg.lookback_hours);
+            brief_print_focus(&brief);
+        }
 
         if (cfg.mcp_focus) {
             mcp_target_t target;
             if (mcp_detect_connected(&cfg, &all_sessions, &target)) {
-                printf(ANSI_DIM "  Consulting connected tools via %s (%s) for today's priorities...\n" ANSI_RESET,
-                       target.host_name, target.servers);
-                fflush(stdout);
+                if (!opts.json_output) {
+                    printf(ANSI_DIM "  Consulting connected tools via %s (%s) for today's priorities...\n" ANSI_RESET,
+                           target.host_name, target.servers);
+                    fflush(stdout);
+                }
 
                 char context[16384];
                 char mcp_text[8192];
@@ -576,14 +740,22 @@ int main(int argc, char **argv) {
                     bool added_new = brief_add_mcp_focus(&brief, mcp_text,
                                                         sizeof(brief.focus) / sizeof(brief.focus[0]),
                                                         target.server_name);
-                    if (added_new) {
+                    if (added_new && !opts.json_output) {
                         brief_print_focus(&brief);
                     }
-                } else {
+                } else if (!opts.json_output) {
                     printf(ANSI_DIM "  Connected tools did not return any priorities.\n\n" ANSI_RESET);
                 }
             }
         }
+    }
+
+    if (opts.json_output) {
+        session_list_sort_by_recency(&all_sessions);
+        print_json_output(&all_sessions, &brief, &cfg, cfg.lookback_hours);
+        session_list_free(&all_sessions);
+        config_destroy(&cfg);
+        return 0;
     }
 
     /* Per-session details */
