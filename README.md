@@ -249,6 +249,16 @@ flint completion powershell | Out-String | Invoke-Expression
 
 The completion scripts cover all options, terminal names, workspace paths, and the `completion` subcommand.
 
+### Man page
+
+A roff man page is included at `man/flint.1`:
+
+```sh
+man ./man/flint.1
+```
+
+The Homebrew formula installs it as `flint(1)` automatically.
+
 ### Daily Standup Log & Journal
 
 Pass `-j` / `--journal` to record the daily standup summary into a markdown Git repository:

@@ -10,6 +10,8 @@ Status reviewed against the code on 2026-11-24. `make` builds cleanly and `make 
 - [x] **Interactive resume picker (2026-11-18).** TTY runs now list resumable sessions and accept numbers/ranges (`1,3-4`), `a` for all, or `n` for none. `-r` still resumes all without prompting.
 - [x] **JSON output (2026-11-24).** Added `--json` for machine-readable briefs: version, timestamp, lookback, resume mode, workspace groups, sessions, git state, resume commands, and ranked focus. It is read-only and skips launch/journal output.
 - [x] **Shell completions (2026-11-24).** Added `flint completion bash|zsh|fish|powershell`, covering options, terminal names, workspace paths, and the completion subcommand.
+- [x] **Man page (2026-11-24).** Added `man/flint.1` covering options, commands, configuration, files, and examples; Homebrew installs it as `flint(1)`.
+- [x] **Automated Homebrew tap updates (2026-11-24).** The tap repo now has a scheduled/manual workflow that reads the latest Flint release, updates the formula URL/SHA-256, and commits the change.
 - [x] **Auth preflight warnings (2026-11-17).** Before launching Claude or Codex sessions, Flint checks login state and warns once per tool with the appropriate login command. API-key environment variables suppress the warning.
 - [x] **Cross-platform CI (2026-11-17).** Added `.github/workflows/ci.yml` for macOS Intel, Ubuntu, and Windows (MSYS2/UCRT64), including build, tests, and a benchmark smoke run on Unix.
 - [x] **Native Windows `nmake` CI (2026-11-18).** Added a Windows job using MSVC dev tools plus Clang; `nmake` and `nmake test` are green.

@@ -1,0 +1,125 @@
+.TH FLINT 1 "2026-11-24" "Flint 0.7.1" "User Commands"
+.SH NAME
+flint \- morning brief and AI session manager
+.SH SYNOPSIS
+.B flint
+[\fIOPTIONS\fR]
+.br
+.B flint completion
+\fIshell\fR
+.SH DESCRIPTION
+.B flint
+discovers recent sessions from supported AI coding CLIs, prints a grouped
+morning brief and ranked focus list, and can reopen those sessions in your
+terminal.
+.PP
+Supported adapters include Antigravity CLI, Claude Code, ChatGPT Codex, Cline,
+OpenCode, and OpenClaw. MCP focus is optional and uses the most recent session's
+host unless configured otherwise.
+.SH OPTIONS
+.TP
+.BR \-s ", " \-\-summary
+Print the summary only; do not launch sessions.
+.TP
+.B \-\-json
+Print a machine-readable JSON document. This is read-only and skips the banner,
+journal writing, and session launching.
+.TP
+.BR \-r ", " \-\-resume
+Resume all matching sessions without prompting.
+.TP
+.BI \-\-limit " N"
+Resume at most the N most recent non-running sessions.
+.TP
+.BI \-t ", " \-\-terminal " NAME"
+Target terminal client, for example iterm2, ghostty, apple-terminal,
+gnome-terminal, kitty, or windows-terminal.
+.TP
+.BI \-\-wrapper " NAME"
+Prepend a launcher binary to every resume command.
+.TP
+.BI \-d ", " \-\-days " N"
+Look back N days.
+.TP
+.BI \-\-hours " H"
+Look back H hours.
+.TP
+.BI \-w ", " \-\-workspace " PATH"
+Only include sessions whose workspace contains PATH.
+.TP
+.BR \-j ", " \-\-journal
+Record the daily standup log in the journal repository.
+.TP
+.B \-\-weekly
+Generate and display the weekly summary.
+.TP
+.B \-\-monthly
+Generate and display the monthly summary.
+.TP
+.B \-\-mcp
+Query connected MCP tools for focus items.
+.TP
+.B \-\-no\-mcp
+Skip MCP queries for this run.
+.TP
+.BI \-c ", " \-\-config " PATH"
+Use a custom configuration file.
+.TP
+.B \-\-init\-config
+Generate the default configuration template.
+.TP
+.BR \-n ", " \-\-dry\-run
+Show commands without launching terminals.
+.TP
+.BR \-l ", " \-\-list\-terminals
+List supported and detected terminal clients.
+.TP
+.BR \-v ", " \-\-version
+Print the Flint version.
+.TP
+.BR \-h ", " \-\-help
+Print help.
+.SH COMMANDS
+.TP
+.BI completion " SHELL"
+Print a completion script for bash, zsh, fish, or powershell.
+.SH CONFIGURATION
+Flint reads
+.I ~/.config/flint/config
+or
+.I ~/.flintrc.
+Global keys include terminal, resume_mode, journal_repo, lookback_hours,
+open_in_tabs, auto_journal, mcp_focus, and mcp_host.
+.PP
+Per-tool sections such as [agy], [claude], [codex], [cline], [opencode], and
+[openclaw] accept wrapper, model, and effort.
+.SH FILES
+.TP
+.I ~/.config/flint/config
+User configuration.
+.TP
+.I ~/.flintrc
+Legacy configuration path.
+.TP
+.I ~/notes/flint-journal
+Default journal repository.
+.SH EXAMPLES
+.TP
+.B flint
+Show the morning brief and choose sessions interactively.
+.TP
+.B flint \-\-json \-\-days 7
+Emit JSON for the last seven days.
+.TP
+.B flint \-r \-n \-\-limit 3
+Dry-run resuming the three most recent sessions.
+.TP
+.B flint completion zsh
+Print a zsh completion script.
+.SH SEE ALSO
+.BR git (1),
+.BR claude (1),
+.BR codex (1),
+.BR opencode (1)
+.SH VERSION
+Flint 0.7.1
