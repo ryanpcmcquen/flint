@@ -14,6 +14,7 @@
 #include "../source/ai/mcp.h"
 #include "../source/ai/ai_adapter.h"
 #include "../source/brief/brief.h"
+#include "../source/completion/completion.h"
 #include "../source/config/config.h"
 #include "../source/git/git.h"
 #include "../source/util/fs.h"
@@ -1395,6 +1396,31 @@ static void test_mcp_host_backends(void) {
     PASS();
 }
 
+static void test_completion_scripts(void) {
+    TEST("completion scripts for bash, zsh, fish, and powershell");
+    const char *bash = completion_script("bash");
+    assert(bash != NULL);
+    assert(strstr(bash, "complete -F _flint flint") != NULL);
+
+    const char *zsh = completion_script("zsh");
+    assert(zsh != NULL);
+    assert(strstr(zsh, "#compdef flint") != NULL);
+    assert(strstr(zsh, "_arguments") != NULL);
+
+    const char *fish = completion_script("fish");
+    assert(fish != NULL);
+    assert(strstr(fish, "complete -c flint") != NULL);
+
+    const char *powershell = completion_script("powershell");
+    assert(powershell != NULL);
+    assert(strstr(powershell, "Register-ArgumentCompleter") != NULL);
+    assert(completion_script("pwsh") == powershell);
+
+    assert(completion_script("tcsh") == NULL);
+    assert(completion_print("tcsh") == false);
+    PASS();
+}
+
 static void test_session_selection_parser(void) {
     TEST("session selection parser: ranges and lists");
     bool selected[5];
@@ -1658,6 +1684,7 @@ int main(void) {
     test_git_inspection();
     test_journal_generation();
     test_proc_running();
+    test_completion_scripts();
     test_session_selection_parser();
     test_resume_mode_filter();
 

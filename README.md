@@ -151,6 +151,7 @@ Options:
       --init-config       Generate default ~/.config/flint/config template
   -n, --dry-run           Show commands that would be executed without launching
   -l, --list-terminals    List all supported and detected terminal clients
+      completion <shell>  Print shell completions (bash, zsh, fish, powershell)
   -v, --version           Print Flint version
   -h, --help              Print this help menu
 ```
@@ -227,6 +228,26 @@ This emits a single JSON document containing:
 - Ranked focus items
 
 `--json` skips the banner, journal writing, and session launching, so it is read-only.
+
+### Shell completions
+
+Generate completions for your shell:
+
+```sh
+# bash
+flint completion bash > ~/.local/share/bash-completion/completions/flint
+
+# zsh
+flint completion zsh > "${fpath[1]}/_flint"
+
+# fish
+flint completion fish > ~/.config/fish/completions/flint.fish
+
+# PowerShell
+flint completion powershell | Out-String | Invoke-Expression
+```
+
+The completion scripts cover all options, terminal names, workspace paths, and the `completion` subcommand.
 
 ### Daily Standup Log & Journal
 

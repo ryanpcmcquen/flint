@@ -2,6 +2,7 @@
 #include "ai/ai_adapter.h"
 #include "ai/mcp.h"
 #include "brief/brief.h"
+#include "completion/completion.h"
 #include "terminal/terminal.h"
 #include "config/config.h"
 #include "git/git.h"
@@ -227,6 +228,7 @@ static void print_usage(const char *prog_name) {
     printf("      --init-config       Generate default ~/.config/flint/config template\n");
     printf("  -n, --dry-run           Show commands that would be executed without launching\n");
     printf("  -l, --list-terminals    List all supported and detected terminal clients\n");
+    printf("      completion <shell>  Print shell completions (bash, zsh, fish, powershell)\n");
     printf("  -v, --version           Print Flint version\n");
     printf("  -h, --help              Print this help menu\n\n");
 }
@@ -647,6 +649,19 @@ static int resume_sessions(const session_list_t *list, const terminal_adapter_t 
 }
 
 int main(int argc, char **argv) {
+    if (argc >= 2 && strcmp(argv[1], "completion") == 0) {
+        if (argc < 3) {
+            fprintf(stderr, "Usage: flint completion <bash|zsh|fish|powershell>\n");
+            return 1;
+        }
+        if (!completion_print(argv[2])) {
+            fprintf(stderr, "Unsupported shell: %s\n", argv[2]);
+            fprintf(stderr, "Supported shells: bash, zsh, fish, powershell\n");
+            return 1;
+        }
+        return 0;
+    }
+
     flint_options_t opts;
     if (parse_args(argc, argv, &opts) != 0) {
         return 1;
